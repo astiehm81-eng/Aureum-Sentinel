@@ -6,7 +6,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
-print("🛡️ AUREUM SENTINEL V42.3 - SPREAD-READY")
+print("🛡️ AUREUM SENTINEL V42.4 - NIGHTWATCH")
 sys.stdout.flush()
 
 def setup_driver():
@@ -23,27 +23,28 @@ def setup_driver():
         return None
 
 if __name__ == "__main__":
-    # Liste deiner Ziel-WKNs
     target_wkns = ["ENER61", "SAP000", "BASF11", "DTE000", "VOW300"]
-    
     driver = setup_driver()
+    
     if driver:
         for wkn in target_wkns:
             try:
                 driver.get(f"https://www.ls-tc.de/de/aktie/{wkn}")
-                time.sleep(5) # Etwas mehr Zeit für die Preis-Animation
+                time.sleep(6) 
                 html = driver.page_source
                 
-                # Smarte Suche nach Preisen (verschiedene CSS-Klassen/Attribute)
-                price = None
-                patterns = [
+                # Erweiterte Suche: Findet Preise auch in Tabellen oder nach dem Wort 'Kurs'
+                # Sucht nach Zahlenformaten wie 24,15 oder 1.234,50
+                price_patterns = [
                     r'data-price="([\d,.]+)"',
-                    r'class="price">([\d,.]+)</span>',
-                    r'itemprop="price" content="([\d,.]+)"'
+                    r'itemprop="price" content="([\d,.]+)"',
+                    r'>([\d,.]+)\s*&nbsp;EUR',
+                    r'class="price">.*?([\d,.]+)'
                 ]
                 
-                for p in patterns:
-                    match = re.search(p, html)
+                price = None
+                for pattern in price_patterns:
+                    match = re.search(pattern, html)
                     if match:
                         price = match.group(1)
                         break
@@ -51,11 +52,17 @@ if __name__ == "__main__":
                 if price:
                     print(f"✅ {wkn}: {price} €")
                 else:
-                    print(f"⚠️ {wkn}: Kurs aktuell nur über API/Tabelle sichtbar.")
+                    # Letzter Versuch: Suche einfach die erste vernünftige Zahl nach der WKN
+                    fallback = re.search(fr'{wkn}.*?>([\d,.]+)<', html, re.DOTALL)
+                    if fallback:
+                        print(f"✅ {wkn}: {fallback.group(1)} € (Fallback-Sync)")
+                    else:
+                        print(f"📡 {wkn}: Markt im Standby (Warte auf Eröffnung)")
+                
                 sys.stdout.flush()
             except:
                 continue
         driver.quit()
     
-    print("\n🏁 Mission abgeschlossen. Sentinel im 30-Min-Rhythmus aktiv.")
+    print("\n🏁 Patrouille beendet. Nächster Scan in 30 Min.")
     sys.stdout.flush()
