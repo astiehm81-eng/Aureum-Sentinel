@@ -1,4 +1,4 @@
-def setup_driver():
+edef setup_driver():
     options = Options()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
