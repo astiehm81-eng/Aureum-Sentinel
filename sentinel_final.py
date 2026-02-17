@@ -1,4 +1,4 @@
-import sys
+        import sys
 import time
 import re
 import random
@@ -76,6 +76,42 @@ def scan_asset(wkn):
             except:
                 timeframes_status.append(f"{period}:FAIL")
         
+        # Daten-Aufbereitung
+        if bid and ask:
+            b_val = bid.group(1)
+            a_val = ask.group(1)
+            return f"✅ *{wkn}* | B: {b_val} | A: {a_val} | Hist: {'/'.join(timeframes_status)}"
+        else:
+            return f"⚠️ *{wkn}* | Seite geladen, Kurse aktuell im Standby"
+            
+    except Exception as e:
+        return f"❌ *{wkn}* | Fehler: {str(e)[:50]}"
+    finally:
+        driver.quit()
+
+if __name__ == "__main__":
+    print(f"🛡️ AUREUM SENTINEL V55 - START (24 WORKER)")
+    sys.stdout.flush()
+    
+    start_time = time.time()
+    results = []
+    
+    # Parallel-Verarbeitung mit 24 Workern
+    with ThreadPoolExecutor(max_workers=24) as executor:
+        results = list(executor.map(scan_asset, TARGET_WKNS))
+    
+    # Zusammenfassung für Telegram
+    duration = round(time.time() - start_time, 2)
+    summary = f"🛰️ *Aureum Sentinel Scan Report*\n"
+    summary += f"⏱️ Dauer: {duration}s\n"
+    summary += "---\n"
+    summary += "\n".join(results)
+    
+    print(summary)
+    send_telegram(summary)
+    
+    print("\n🏁 Mission abgeschlossen. Daten an Telegram-Hook übertragen.")
+    sys.stdout.flush()
         # Daten-Aufbereitung
         if bid and ask:
             b_val = bid.group(1)
