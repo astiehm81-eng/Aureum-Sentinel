@@ -6,7 +6,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
-print("🛡️ AUREUM SENTINEL V42.4 - NIGHTWATCH")
+print("🛡️ AUREUM SENTINEL V45 - SPREAD-PRECISION")
 sys.stdout.flush()
 
 def setup_driver():
@@ -19,8 +19,7 @@ def setup_driver():
     try:
         service = Service(ChromeDriverManager().install())
         return webdriver.Chrome(service=service, options=options)
-    except:
-        return None
+    except: return None
 
 if __name__ == "__main__":
     target_wkns = ["ENER61", "SAP000", "BASF11", "DTE000", "VOW300"]
@@ -30,39 +29,36 @@ if __name__ == "__main__":
         for wkn in target_wkns:
             try:
                 driver.get(f"https://www.ls-tc.de/de/aktie/{wkn}")
-                time.sleep(6) 
+                time.sleep(7) 
                 html = driver.page_source
                 
-                # Erweiterte Suche: Findet Preise auch in Tabellen oder nach dem Wort 'Kurs'
-                # Sucht nach Zahlenformaten wie 24,15 oder 1.234,50
-                price_patterns = [
-                    r'data-price="([\d,.]+)"',
-                    r'itemprop="price" content="([\d,.]+)"',
-                    r'>([\d,.]+)\s*&nbsp;EUR',
-                    r'class="price">.*?([\d,.]+)'
-                ]
+                # Wir suchen gezielt nach den Bid/Ask Containern aus deinem Screenshot
+                # Diese befinden sich oft in "push-bid" und "push-ask" Klassen
+                bid = re.search(r'id="push-bid".*?>([\d,.]+)<', html)
+                ask = re.search(r'id="push-ask".*?>([\d,.]+)<', html)
                 
-                price = None
-                for pattern in price_patterns:
-                    match = re.search(pattern, html)
-                    if match:
-                        price = match.group(1)
-                        break
-                
-                if price:
-                    print(f"✅ {wkn}: {price} €")
+                if bid and ask:
+                    b_val = bid.group(1)
+                    a_val = ask.group(1)
+                    # Berechnung des Spreads in Prozent (für den Eisernen Standard)
+                    try:
+                        b_float = float(b_val.replace('.', '').replace(',', '.'))
+                        a_float = float(a_val.replace('.', '').replace(',', '.'))
+                        spread = ((a_float - b_float) / b_float) * 100
+                        print(f"✅ {wkn} | Bid: {b_val} | Ask: {a_val} | Spread: {spread:.3f}%")
+                    except:
+                        print(f"✅ {wkn} | Bid: {b_val} | Ask: {a_val}")
                 else:
-                    # Letzter Versuch: Suche einfach die erste vernünftige Zahl nach der WKN
-                    fallback = re.search(fr'{wkn}.*?>([\d,.]+)<', html, re.DOTALL)
-                    if fallback:
-                        print(f"✅ {wkn}: {fallback.group(1)} € (Fallback-Sync)")
+                    # Fallback Suche für das Nacht-Layout
+                    fallback_price = re.search(r'class="price".*?>([\d,.]+)<', html)
+                    if fallback_price:
+                        print(f"✅ {wkn}: {fallback_price.group(1)} € (Last)")
                     else:
-                        print(f"📡 {wkn}: Markt im Standby (Warte auf Eröffnung)")
+                        print(f"📡 {wkn}: Warte auf Kursdaten...")
                 
                 sys.stdout.flush()
-            except:
-                continue
+            except: continue
         driver.quit()
     
-    print("\n🏁 Patrouille beendet. Nächster Scan in 30 Min.")
+    print("\n🏁 Mission abgeschlossen. Monitoring läuft.")
     sys.stdout.flush()
