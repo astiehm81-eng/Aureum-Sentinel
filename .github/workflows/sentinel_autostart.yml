@@ -4,7 +4,10 @@ on:
   schedule:
     # Führt den Check alle 30 Minuten während der Handelszeit aus (Mo-Fr)
     - cron: '*/30 7-21 * * 1-5'
-  workflow_dispatch: # Erlaubt dir, den Scan jederzeit manuell zu starten
+  workflow_dispatch: # Erlaubt manuellen Start
+
+permissions:
+  contents: write # Wichtig für das Hochladen der CSV
 
 jobs:
   build:
@@ -15,7 +18,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Set up Python
-        uses: uses/setup-python@v4
+        uses: actions/setup-python@v4 # Korrigierter Pfad
         with:
           python-version: '3.9'
 
