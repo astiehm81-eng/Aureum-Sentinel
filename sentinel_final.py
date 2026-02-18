@@ -1,6 +1,7 @@
 import requests
 import csv
 import time
+import random
 
 ASSETS = {
     "DE000ENER610": "Siemens Energy",
@@ -9,45 +10,47 @@ ASSETS = {
     "DE0005190003": "BMW"
 }
 
-def fetch_stealth(isin, name):
-    # Wir tarnen uns als mobiles Endgerät (wie dein Handy im Screenshot)
+def fetch_with_jitter(isin, name):
+    # Zufällige Verzögerung vor dem Start, um Cluster-Anfragen zu vermeiden
+    time.sleep(random.uniform(2.1, 4.8))
+    
     headers = {
-        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1",
-        "Accept": "application/json",
-        "Referer": "https://www.ls-tc.de/de/",
-        "X-Requested-With": "XMLHttpRequest"
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Referer": "https://www.ls-tc.de/de/aktie/" + isin,
+        "Origin": "https://www.ls-tc.de"
     }
     
-    # Wir nutzen den Chart-Endpoint, aber mit einem Cache-Buster Zeitstempel
-    url = f"https://www.ls-tc.de/_rpc/json/instrument/chart/data?isin={isin}&period=intraday&_={int(time.time()*1000)}"
+    url = f"https://www.ls-tc.de/_rpc/json/instrument/chart/data?isin={isin}&period=intraday"
     
     try:
-        session = requests.Session()
-        # Vorab-Besuch der Hauptseite für Session-Cookies
-        session.get("https://www.ls-tc.de/de/", headers=headers, timeout=5)
-        
-        response = session.get(url, headers=headers, timeout=10)
-        
-        if response.status_code == 200:
-            data = response.json()
-            if "series" in data and "intraday" in data["series"]:
-                points = data["series"]["intraday"]["data"]
-                if points:
-                    price = points[-1][1]
-                    print(f"✅ {name}: {price} €")
-                    return [time.strftime('%H:%M:%S'), isin, name, price, "SUCCESS"]
-        
-        return [time.strftime('%H:%M:%S'), isin, name, "0.00", f"HTTP_{response.status_code}"]
+        # Wir nutzen eine Session, um Cookies über Requests hinweg zu behalten
+        with requests.Session() as session:
+            # 1. Wir "besuchen" erst die Hauptseite (Landing Page Simulation)
+            session.get(f"https://www.ls-tc.de/de/aktie/{isin}", headers=headers, timeout=10)
+            time.sleep(random.uniform(1.5, 3.0)) # "Bedenkzeit" eines Menschen
+            
+            # 2. Jetzt erst die Daten-Abfrage
+            response = session.get(url, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                price = data["series"]["intraday"]["data"][-1][1]
+                print(f"✅ {name}: {price} €")
+                return [isin, name, price, "OK"]
+            else:
+                return [isin, name, "0.00", f"HTTP_{response.status_code}"]
+                
     except Exception as e:
-        return [time.strftime('%H:%M:%S'), isin, name, "0.00", f"ERR_{type(e).__name__}"]
+        return [isin, name, "0.00", f"FEHLER_{str(e)[:10]}"]
 
 if __name__ == "__main__":
     results = []
     for isin, name in ASSETS.items():
-        results.append(fetch_stealth(isin, name))
-        time.sleep(2) # Sanfte Pausen gegen Bot-Erkennung
-
+        results.append(fetch_with_jitter(isin, name))
+    
     with open('sentinel_history.csv', 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['Time', 'ISIN', 'Asset', 'Price', 'Status'])
+        writer.writerow(['ISIN', 'Asset', 'Price', 'Status'])
         writer.writerows(results)
