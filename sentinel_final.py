@@ -1,9 +1,7 @@
 import requests
 import csv
 import time
-import re
 
-# Die validierten ISINs für den direkten Datenzugriff
 ASSETS = {
     "DE000ENER610": "Siemens Energy",
     "DE000BASF111": "BASF",
@@ -11,58 +9,44 @@ ASSETS = {
     "DE0005190003": "BMW"
 }
 
-CSV_FILE = 'sentinel_history.csv'
-
-def fetch_data(isin, name):
-    # Wir simulieren einen echten Browser-Request
+def fetch_rpc_data(isin, name, period="intraday"):
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        "Referer": f"https://www.ls-tc.de/de/aktie/{isin}"
     }
     
-    url = f"https://www.ls-tc.de/de/aktie/{isin}"
+    # Der direkte Daten-Kanal für die Kurve
+    url = f"https://www.ls-tc.de/_rpc/json/instrument/chart/data?isin={isin}&period={period}"
     
     try:
         response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code != 200:
-            return [time.strftime('%Y-%m-%d %H:%M:%S'), isin, name, "0.00", "BLOCKED"]
-
-        # Wir extrahieren den Preis mit RegEx direkt aus dem Quelltext
-        # Suche nach dem Bid-Wert im JSON-Block der Seite
-        content = response.text
-        # Das Muster sucht nach "bid":161.45 oder ähnlichem im JS-Teil
-        match = re.search(r'"bid":([\d\.]+)', content)
+        data = response.json()
         
-        if match:
-            price = match.group(1)
-            print(f"✅ {name}: {price} € (Direkt-Extraktion)")
-            return [time.strftime('%Y-%m-%d %H:%M:%S'), isin, name, price, "Intraday"]
-        else:
-            # Fallback: Suche nach dem Preis im HTML-String
-            match_html = re.search(r'itemprop="price" content="([\d\.]+)"', content)
-            if match_html:
-                price = match_html.group(1)
-                return [time.strftime('%Y-%m-%d %H:%M:%S'), isin, name, price, "Intraday"]
-                
-        return [time.strftime('%Y-%m-%d %H:%M:%S'), isin, name, "0.00", "NOT_FOUND"]
-
+        # Wir nehmen den allerletzten Punkt der Kurve (Series -> Intraday -> Letzter Eintrag)
+        if "series" in data and "intraday" in data["series"]:
+            points = data["series"]["intraday"]["data"]
+            if points:
+                last_point = points[-1] # [Timestamp, Price]
+                price = last_point[1]
+                print(f"✅ {name} ({period}): {price} €")
+                return [time.strftime('%Y-%m-%d %H:%M:%S'), isin, name, price, period]
+        
+        return [time.strftime('%Y-%m-%d %H:%M:%S'), isin, name, "0.00", "EMPTY_RPC"]
     except Exception as e:
-        return [time.strftime('%Y-%m-%d %H:%M:%S'), isin, name, "0.00", f"ERROR: {str(e)[:20]}"]
+        return [time.strftime('%Y-%m-%d %H:%M:%S'), isin, name, "0.00", f"RPC_ERR: {str(e)[:15]}"]
 
 if __name__ == "__main__":
-    # 1. CSV Reset
-    with open(CSV_FILE, 'w', newline='', encoding='utf-8') as f:
+    with open('sentinel_history.csv', 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(['Timestamp', 'ISIN', 'Asset', 'Price', 'Type'])
-
-    # 2. Daten sammeln
-    results = []
-    for isin, name in ASSETS.items():
-        results.append(fetch_data(isin, name))
-
-    # 3. Speichern
-    with open(CSV_FILE, 'a', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        writer.writerows(results)
-    
-    print(f"🏁 Sentinel-Run beendet. {len(results)} Zeilen geschrieben.")
+        
+        for isin, name in ASSETS.items():
+            # Erst Intraday (für den 161,xx Check)
+            res_intra = fetch_rpc_data(isin, name, "intraday")
+            writer.writerow(res_intra)
+            
+            # Dann 1 Monat (für die Historie)
+            res_month = fetch_rpc_data(isin, name, "history")
+            writer.writerow(res_month)
+            
+    print("🏁 RPC-Sentinel Run beendet. Historie & Intraday synchronisiert.")
