@@ -1,60 +1,39 @@
-# ======================================================
-# AUREUM SENTINEL - CONFIGURATION V1.16.0 (FINAL)
-# ======================================================
-# Status: Eisernen Standard (V42) | Target: Aureum Protocol
+name: Aureum Sentinel V116 Autostart
 
-system_core:
-  version: "1.16.0"
-  process_name: "Aureum Sentinel"
-  heartbeat_interval_s: 60        # 1-Minuten-Takt für Breitband-Markt
-  delete_buffer_on_start: true    # Löscht alte Cache-Werte (18.02.)
-  enforce_hard_refresh: true      # Direkter Tradegate-Zugriff erzwungen
-  self_learning_bias_corr: true   # Automatische Fehlerkorrektur
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    - cron: '*/60 * * * *' # Startet jede Stunde automatisch
+  workflow_dispatch: # Ermöglicht manuellen Start
 
-market_logic:
-  strategy: "Hard-Refresh-Tradegate"
-  noise_filter_active: false      # DEAKTIVIERT laut Anweisung 18.02.
-  anchor_point_trigger: 0.001     # 0.1% Regel für neue Fixpunkte
-  swarm_optimizer: true           # Default für alle Signale
-  impact_variance: "dynamic"      # Dynamische Gewichtung der Faktoren
+jobs:
+  run-sentinel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-analysis_layers:
-  layer_1_fourier: "Wavelet-Denoising"
-  layer_2_kriging: "Spatial-DNN-Mapping"
-  layer_3_mc: "1.000.000-Monte-Carlo-Paths"
-  layer_4_gamma: "GEX-Volatility-Proxy"
-  layer_5_mrs: "Mansfield-Relative-Strength"
-  layer_6_context:                # Context-Layer (18.02.)
-    enabled: true
-    modules: 
-      - "Sentiment-NLP"           # Media-Time-Decay integriert
-      - "DXY-Currency-Matrix"     # US-Dollar/Euro Kopplung
-      - "Supply-Chain-Cascade"    # Sektor-Abhängigkeiten
-      - "Dark-Pool-Convergence"   # Institutionelle Daten
-    time_decay_filter: 0.85       # Filter für Medieneinflüsse
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-discovery_engine:
-  mode: "Full-Market-Scan"       # Scannt alle L&S / Tradegate Assets
-  parallel_workers: 15            # Maximale Rechenpower-Nutzung
-  bot_protection:
-    header_rotation: true
-    jitter_range: [0.1, 0.4]
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy requests PyYAML scipy statsmodels
 
-push_notifications:
-  enabled: true
-  priority_assets:                # Haupt-Fokus für Sofort-Push
-    - "DE000A1KWPQ3"              # Gold (A1KWPQ)
-    - "LU0378438732"              # Nasdaq-100 (LYX00F)
-  triggers:
-    on_anchor_point: true         # Push bei jeder 0.1% Bewegung
-    on_sync_crash_level: 85.0     # Alarm bei Markt-Synchronität > 85%
-    on_spread_warning: 0.05       # Warnung bei OnVista/LS-Differenz
-    on_confirmation_latency: true # Integration Latenz-Check
+      - name: Run Aureum Sentinel V116
+        run: python aureum_sentinel_v116.py
+        env:
+          # Hier kannst du später Webhook-URLs als Secrets hinterlegen
+          PUSH_WEBHOOK_URL: ${{ secrets.PUSH_WEBHOOK_URL }}
 
-storage:
-  csv_output: "aureum_sentinel_v116_data.csv"
-  write_strategy: "atomic_flush"  # Verhindert Einfrieren der Datei
-  force_csv_refresh: true         # Schließt Datei nach jedem Schreibvorgang
-  historical_data_source:
-    recent: "Tradegate"           # < 1 Woche
-    deep: "Yahoo"                 # > 1 Woche
+      - name: Commit and Push CSV Updates
+        run: |
+          git config --global user.name "Aureum-Sentinel-Bot"
+          git config --global user.email "bot@aureum-sentinel.ai"
+          git add aureum_sentinel_v116_data.csv
+          git commit -m "V116: Automatisches Daten-Update [skip ci]" || echo "Keine Änderungen zu committen"
+          git push
