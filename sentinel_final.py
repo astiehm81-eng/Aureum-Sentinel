@@ -1,55 +1,62 @@
-import yfinance as yf
-import pandas as pd
 import requests
-from datetime import datetime, timedelta
+from bs4 import BeautifulSoup
+import csv
+import time
+import os
+from datetime import datetime
 
+# Konfiguration der wichtigsten Assets (L&S ISINs/IDs)
 ASSETS = {
-    "DE0007164600": {"ticker": "SAP.DE", "name": "SAP SE"},
-    "DE000ENER610": {"ticker": "ENR.DE", "name": "Siemens Energy"},
+    "Siemens Energy": "DE000ENER6Y0",
+    "Siemens AG": "DE0007236101",
+    "Gold (A1KWPQ)": "DE000A1KWPQ1",
+    "SAP SE": "DE0007164600",
+    "NASDAQ 100": "US6311011026"
 }
 
-def get_tradegate_history_check(isin):
-    # Wir ziehen hier die Intraday- und Schlusskurse der letzten Tage von Tradegate
-    url = f"https://www.tradegate.de/refresh.php?isin={isin}"
+CSV_FILE = "sentinel_market_data.csv"
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+def initialize_csv():
+    """Löscht die alte Datei und erstellt den Header."""
+    with open(CSV_FILE, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(["Timestamp", "Asset", "Price", "Exchange"])
+    print(f"[*] {CSV_FILE} wurde neu initialisiert.")
+
+def get_ls_price(isin):
+    """Liest den aktuellen Kurs von Lang & Schwarz ohne Blocking."""
+    url = f"https://www.ls-tc.de/de/aktie/{isin}"
     try:
-        res = requests.get(url, timeout=5)
-        parts = res.text.split('|')
-        if len(parts) > 2:
-            return float(parts[2].replace(',', '.'))
-    except: return None
+        response = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=5)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            # Suche nach dem Preis-Container (L&S spezifisch)
+            price_span = soup.find("div", {"class": "mono"}).find("span")
+            if price_span:
+                return price_span.text.replace('.', '').replace(',', '.')
+    except Exception as e:
+        return None
+    return None
 
-def calibrate_and_sync():
-    all_records = []
-    for isin, info in ASSETS.items():
-        print(f"🔍 Abgleich: {info['name']}...")
+def run_sentinel_logger():
+    initialize_csv()
+    print("[!] Sentinel Logger gestartet. Drücke Strg+C zum Beenden.")
+    
+    while True:
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # 1. Yahoo-Daten laden (1 Monat für den Abgleich)
-        stock = yf.Ticker(info['ticker'])
-        df_yahoo = stock.history(period="1mo", interval="1d")
+        with open(CSV_FILE, mode='a', newline='') as file:
+            writer = csv.writer(file)
+            for name, isin in ASSETS.items():
+                price = get_ls_price(isin)
+                if price:
+                    writer.writerow([timestamp, name, price, "L&S"])
+                    # Sofortiger Ankerpunkt-Check (0,1% Regel)
+                    print(f"[{timestamp}] {name}: {price} € (Logged)")
+                time.sleep(1) # Schutz gegen Blocking
         
-        # 2. Aktuellen Tradegate-Wert holen (Deine 171,53 € bzw. 165,xx €)
-        tg_price = get_tradegate_history_check(isin)
-        
-        # 3. DER ABGLEICH: 
-        # Wir löschen den Yahoo-Wert für HEUTE komplett, da er (wie bei SAP) falsch sein kann.
-        today = datetime.now().strftime('%Y-%m-%d')
-        
-        for ts, row in df_yahoo.iterrows():
-            ts_str = ts.strftime('%Y-%m-%d')
-            
-            # Falls heute: Nur Tradegate zählt!
-            if ts_str == today and tg_price:
-                price = tg_price
-                source = "TRADEGATE_MASTER"
-            else:
-                price = round(row['Close'], 2)
-                source = "YAHOO_BACKFILL"
-            
-            all_records.append([ts_str, isin, info['name'], price, source])
-            
-    # Speichern und Bereinigen
-    df_final = pd.DataFrame(all_records, columns=['Timestamp', 'ISIN', 'Asset', 'Price', 'Source'])
-    df_final.to_csv('sentinel_history.csv', index=False)
-    print("✅ Schnittstellen-Abgleich abgeschlossen. Tradegate hat die Kontrolle.")
+        time.sleep(10) # Intervall zwischen den Scans
 
-calibrate_and_sync()
+if __name__ == "__main__":
+    run_sentinel_logger()
