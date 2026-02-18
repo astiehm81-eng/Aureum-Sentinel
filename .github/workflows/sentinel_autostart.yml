@@ -1,35 +1,36 @@
-name: Aureum Sentinel V75
+name: Aureum Sentinel - Deep Scan & Calibration
+
 on:
   schedule:
-    - cron: '*/15 * * * *' # Alle 15 Minuten
-  workflow_dispatch: # Erlaubt manuellen Start per Knopfdruck
+    # Führt den Check alle 30 Minuten während der Handelszeit aus (Mo-Fr)
+    - cron: '*/30 7-21 * * 1-5'
+  workflow_dispatch: # Erlaubt dir, den Scan jederzeit manuell zu starten
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # Wichtig: Erlaubt dem Bot das Speichern der CSV
+
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v3
-        
+
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: uses/setup-python@v4
         with:
           python-version: '3.9'
-          
+
       - name: Install Dependencies
         run: |
-          pip install selenium webdriver-manager requests
-          
-      - name: Run Sentinel
+          python -m pip install --upgrade pip
+          pip install yfinance pandas requests
+
+      - name: Run Aureum Sentinel
         run: python sentinel_final.py
-        
-      - name: Commit & Push Changes
+
+      - name: Commit and Push Results
         run: |
           git config --local user.email "action@github.com"
-          git config --local user.name "Aureum-Sentinel-Bot"
-          # Fügt sowohl die Übersicht als auch die Historie hinzu
-          git add sentinel_data.txt sentinel_history.csv || echo "Keine CSV gefunden"
-          git commit -m "🚀 Aureum Sentinel Update: $(date)" || exit 0
+          git config --local user.name "GitHub Action"
+          git add sentinel_history.csv
+          git commit -m "Sentinel Update: MAX-Calibration [$(date)]" || echo "No changes to commit"
           git push
