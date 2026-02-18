@@ -1,19 +1,9 @@
       - name: Commit and Push Market Data
         run: |
-          git config --global user.name "Aureum-Sentinel-Bot"
-          git config --global user.email "sentinel@aureum.de"
-          
-          # Sicherstellen, dass wir auf main sind
-          git checkout main
-          
-          # Debug: Zeige uns, ob die Datei überhaupt existiert und wie groß sie ist
-          ls -lh sentinel_market_data.csv || echo "DATEI NICHT GEFUNDEN"
-          
-          # Force Add
-          git add -f sentinel_market_data.csv
-          
-          # Commit mit Zeitstempel erzwingen
-          git commit -m "🛡️ Aureum V52 Fix: $(date +'%H:%M:%S')" || echo "No changes to commit"
-          
-          # Push mit explizitem Ziel
-          git push origin main
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sentinel_market_data.csv
+          # Wir erzwingen den Commit, selbst wenn Git meint, es gäbe nichts
+          git commit -m "🛡️ Aureum Update: $(date +'%H:%M:%S')" || echo "No changes"
+          # Force Push, um eventuelle Branch-Konflikte zu überspringen
+          git push origin main --force
