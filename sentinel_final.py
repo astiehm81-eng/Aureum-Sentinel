@@ -18,48 +18,54 @@ def setup_driver():
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-gpu')
-    # RAM-Schonung: Keine Bilder, kein CSS
+    # RAM-Schutz: Deaktiviert Bilder und CSS für High-Speed
     prefs = {"profile.managed_default_content_settings.images": 2, "profile.default_content_settings.stylesheets": 2}
     options.add_experimental_option("prefs", prefs)
     try:
         service = Service(ChromeDriverManager().install())
-        return webdriver.Chrome(service=service, options=options)
+        driver = webdriver.Chrome(service=service, options=options)
+        driver.set_page_load_timeout(30)
+        return driver
     except: return None
 
-def scan_batch():
+def scan_pentagon_batch():
     results = []
     driver = setup_driver()
     if not driver: return ["❌ Browser-Start fehlgeschlagen"]
 
-    # Wir teilen die Liste in 2er Paare auf (Parallel-Simulation im RAM-Limit)
-    for i in range(0, len(TARGET_WKNS), 2):
-        batch = TARGET_WKNS[i:i+2]
-        # Taktung 1ms
-        time.sleep(0.001)
+    # 5er Batches für maximale RAM-Effizienz bei hoher Parallelität
+    batch_size = 5
+    for i in range(0, len(TARGET_WKNS), batch_size):
+        batch = TARGET_WKNS[i:i+batch_size]
         
+        # Phase 1: Tabs öffnen und URLs laden
         for idx, wkn in enumerate(batch):
-            try:
-                if idx > 0: # Neuen Tab öffnen für das zweite Asset im Paar
-                    driver.execute_script("window.open('');")
-                    driver.switch_to.window(driver.window_handles[idx])
-                
-                driver.get(f"https://www.ls-tc.de/de/aktie/{wkn}")
-            except: results.append(f"⚠️ {wkn}: Load Fail")
+            if idx > 0:
+                driver.execute_script("window.open('');")
+            driver.switch_to.window(driver.window_handles[idx])
+            driver.get(f"https://www.ls-tc.de/de/aktie/{wkn}")
+            time.sleep(0.001) # 1ms Taktung zwischen den Tab-Befehlen
 
-        time.sleep(3.5) # Warten bis beide geladen sind
+        # Phase 2: Kurze Synchron-Pause (Warten auf JS-Push)
+        time.sleep(4.5) 
 
-        # Daten aus beiden Tabs extrahieren
+        # Phase 3: Daten-Extraktion aus allen offenen Tabs
         for handle in driver.window_handles:
             driver.switch_to.window(handle)
-            wkn_current = re.search(r'aktie/(.*)', driver.current_url).group(1) if "aktie/" in driver.current_url else "Unknown"
             html = driver.page_source
+            
+            # WKN aus URL extrahieren für korrekte Zuordnung
+            current_url = driver.current_url
+            wkn_match = re.search(r'aktie/([^/?#]+)', current_url)
+            wkn_label = wkn_match.group(1) if wkn_match else "Unknown"
+            
             bid = re.search(r'id="push-bid".*?>([\d,.]+)<', html)
             ask = re.search(r'id="push-ask".*?>([\d,.]+)<', html)
             
             status = "✅" if bid else "📡"
-            results.append(f"{status} *{wkn_current}* | B: {bid.group(1) if bid else '-'} | A: {ask.group(1) if ask else '-'}")
+            results.append(f"{status} *{wkn_label}* | B: {bid.group(1) if bid else '-'} | A: {ask.group(1) if ask else '-'}")
 
-        # Tabs schließen außer den ersten, um RAM für das nächste Paar frei zu machen
+        # Tabs aufräumen für den nächsten 5er Batch
         while len(driver.window_handles) > 1:
             driver.switch_to.window(driver.window_handles[-1])
             driver.close()
@@ -69,14 +75,18 @@ def scan_batch():
     return results
 
 if __name__ == "__main__":
-    print("🛡️ AUREUM SENTINEL V67 - BATCH-TAB MODE (RAM-FIX)")
+    print("🛡️ AUREUM SENTINEL V68 - PENTAGON-TAB MODE")
+    sys.stdout.flush()
     start_time = time.time()
-    final_results = scan_batch()
     
-    summary = f"🛰️ *Sentinel Scan Report (Batch-Mode)*\n⏱️ Dauer: {round(time.time()-start_time,1)}s\n---\n"
+    final_results = scan_pentagon_batch()
+    
+    duration = round(time.time() - start_time, 1)
+    summary = f"🛰️ *Sentinel Scan Report (Pentagon-5)*\n⏱️ Dauer: {duration}s\n---\n"
     summary += "\n".join(final_results)
-    print(summary)
     
+    print(summary)
     if TELEGRAM_TOKEN != "DEIN_API_TOKEN":
         requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage", 
                       json={"chat_id": CHAT_ID, "text": summary, "parse_mode": "Markdown"})
+    sys.stdout.flush()
