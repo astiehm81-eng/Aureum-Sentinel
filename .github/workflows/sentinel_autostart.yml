@@ -1,37 +1,19 @@
-name: Aureum Sentinel V52 Execution
-
-on:
-  workflow_dispatch: # Erlaubt manuellen Start
-  schedule:
-    - cron: '*/20 * * * *' # Läuft alle 20 Minuten automatisch
-
-jobs:
-  run-sentinel:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write # ESSENZIELL: Erlaubt dem Bot das Schreiben in dein Repo
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install Dependencies
-        run: |
-          pip install requests beautifulsoup4 lxml
-
-      - name: Execute Aureum Sentinel
-        run: python sentinel_final.py # Hier sicherstellen, dass der Name stimmt
-
       - name: Commit and Push Market Data
         run: |
           git config --global user.name "Aureum-Sentinel-Bot"
           git config --global user.email "sentinel@aureum.de"
-          git add sentinel_market_data.csv
-          # Nur committen, wenn sich die Datei wirklich geändert hat
-          git commit -m "🛡️ V52 Update: Market Data [$(date +'%Y-%m-%d %H:%M:%S')]" || exit 0
-          git push
+          
+          # Sicherstellen, dass wir auf main sind
+          git checkout main
+          
+          # Debug: Zeige uns, ob die Datei überhaupt existiert und wie groß sie ist
+          ls -lh sentinel_market_data.csv || echo "DATEI NICHT GEFUNDEN"
+          
+          # Force Add
+          git add -f sentinel_market_data.csv
+          
+          # Commit mit Zeitstempel erzwingen
+          git commit -m "🛡️ Aureum V52 Fix: $(date +'%H:%M:%S')" || echo "No changes to commit"
+          
+          # Push mit explizitem Ziel
+          git push origin main
