@@ -1,9 +1,44 @@
+name: Aureum Sentinel V52 Execution
+
+on:
+  workflow_dispatch: # Das hier erzwingt den "Run workflow" Button!
+  schedule:
+    - cron: '*/20 * * * *' # Automatischer Start alle 20 Minuten
+
+jobs:
+  run-sentinel:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Erlaubt das Hochladen der CSV
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          pip install requests beautifulsoup4 lxml
+
+      - name: Execute Aureum Sentinel
+        run: python sentinel_final.py # Stelle sicher, dass die Datei im Repo so heißt!
+
       - name: Commit and Push Market Data
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          # Sicherstellen, dass die Datei existiert
           git add sentinel_market_data.csv
-          # Wir erzwingen den Commit, selbst wenn Git meint, es gäbe nichts
-          git commit -m "🛡️ Aureum Update: $(date +'%H:%M:%S')" || echo "No changes"
-          # Force Push, um eventuelle Branch-Konflikte zu überspringen
-          git push origin main --force
+          
+          # Nur committen, wenn es Änderungen gibt
+          if git diff --staged --quiet; then
+            echo "Keine Änderungen zum Hochladen."
+          else
+            git commit -m "🛡️ Aureum Live-Update: $(date +'%H:%M:%S')"
+            git push origin main
+          fi
