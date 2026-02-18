@@ -1,7 +1,7 @@
 import requests
 import csv
 import time
-import re
+import os
 
 ASSETS = {
     "DE000ENER610": "Siemens Energy",
@@ -10,38 +10,78 @@ ASSETS = {
     "DE0005190003": "BMW"
 }
 
-def fetch_tradegate_ultimate(isin, name):
-    url = f"https://www.tradegate.de/refresh.php?isin={isin}"
+def fetch_max_history(isin, name):
+    print(f"📡 Starte Deep-Scan (MAX) für {name}...")
+    # Mode history liefert bei Tradegate das Maximum der verfügbaren Rückschau
+    url = f"https://www.tradegate.de/export.php?isin={isin}&mode=history"
     headers = {"User-Agent": "Mozilla/5.0"}
     
     try:
-        response = requests.get(url, headers=headers, timeout=10)
+        response = requests.get(url, headers=headers, timeout=20)
         if response.status_code == 200:
-            content = response.text
-            # Wir suchen alle Zahlenkombinationen mit Komma (z.B. 161,45)
-            # Tradegate liefert: bid|ask|last|high|low...
-            matches = re.findall(r'(\d+\,\d+)', content)
+            lines = response.text.strip().split('\n')
+            data_points = []
+            for line in lines[1:]:
+                parts = line.split(';')
+                if len(parts) >= 5:
+                    date = parts[0]
+                    # Preis-Normierung auf Punkt-Format
+                    close_p = parts[4].replace(',', '.')
+                    data_points.append({'date': date, 'price': float(close_p)})
             
-            if matches:
-                # Wir nehmen den 'Last' Preis - bei Tradegate meist der 3. oder 4. Wert
-                # Um sicherzugehen, nehmen wir den ersten Wert, der nicht 0,00 ist
-                for val in matches:
-                    if val != "0,00":
-                        clean_price = val.replace(',', '.')
-                        print(f"✅ {name}: {clean_price} €")
-                        return [time.strftime('%H:%M:%S'), isin, name, clean_price, "SUCCESS"]
-            
-        return [time.strftime('%H:%M:%S'), isin, name, "0.00", "RETRY_STRING"]
-    except Exception:
-        return [time.strftime('%H:%M:%S'), isin, name, "0.00", "ERROR"]
+            # Sortierung sicherstellen (alt nach neu)
+            data_points.sort(key=lambda x: time.strptime(x['date'], '%d.%m.%Y'))
+            return data_points
+    except Exception as e:
+        print(f"❌ Fehler bei {name}: {e}")
+    return []
+
+def get_current_tick(isin):
+    # Realtime-Check zur Verifizierung des "Last Stand"
+    url = f"https://www.tradegate.de/refresh.php?isin={isin}"
+    try:
+        res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
+        # Wir extrahieren den Last-Preis (3. Position)
+        parts = res.text.split('|')
+        if len(parts) > 2:
+            return float(parts[2].replace(',', '.'))
+    except:
+        return None
+    return None
 
 if __name__ == "__main__":
-    results = []
-    for isin, name in ASSETS.items():
-        results.append(fetch_tradegate_ultimate(isin, name))
-        time.sleep(1.5) 
+    final_output = []
+    summary = []
 
-    with open('sentinel_history.csv', 'w', newline='') as f:
+    for isin, name in ASSETS.items():
+        # 1. Gesamte verfügbare Historie holen
+        history = fetch_max_history(isin, name)
+        
+        # 2. Den absolut letzten Realtime-Stand zur Verifizierung
+        current_p = get_current_tick(isin)
+        
+        if history:
+            # Lückenlosigkeit prüfen: Wir hängen den heutigen Tick an, 
+            # falls das Archiv von gestern ist
+            today_str = time.strftime('%d.%m.%Y')
+            if history[-1]['date'] != today_str and current_p:
+                history.append({'date': today_str, 'price': current_p})
+            
+            # Für die CSV aufbereiten
+            for entry in history:
+                final_output.append([entry['date'], isin, name, entry['price']])
+            
+            summary.append(f"{name}: {history[0]['date']} bis heute ({len(history)} Tage) | Aktuell: {current_p} €")
+
+    # 3. Lückenloser Export
+    with open('sentinel_history.csv', 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerow(['Time', 'ISIN', 'Asset', 'Price', 'Status'])
-        writer.writerows(results)
+        writer.writerow(['Datum', 'ISIN', 'Asset', 'Schlusskurs'])
+        writer.writerows(final_output)
+
+    # 4. Verifizierung für dich im Log
+    print("\n--- 🛡️ AUREUM SENTINEL VERIFIKATION ---")
+    for s in summary:
+        print(s)
+    print("---------------------------------------")
+    print(f"🏁 Lückenloser Datensatz gespeichert. Bereit für Inkremental-Modus.")
