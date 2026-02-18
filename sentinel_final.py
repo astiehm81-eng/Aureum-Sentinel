@@ -3,75 +3,99 @@ from bs4 import BeautifulSoup
 import csv
 import os
 import time
-from datetime import datetime
+import sys
+from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 
 CSV_FILE = "sentinel_market_data.csv"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
 
-# Definition der Hub-URLs für Massen-Scraping
+# URLs für Massen-Scraping
 INDEX_URLS = {
-    "DAX_All": "https://www.ls-tc.de/de/index/dax",
-    "NASDAQ_All": "https://www.ls-tc.de/de/index/nasdaq-100",
-    "Crypto": "https://www.ls-tc.de/de/kryptowaehrungen"
+    "DAX_Einzel": "https://www.ls-tc.de/de/index/dax",
+    "NASDAQ_Einzel": "https://www.ls-tc.de/de/index/nasdaq-100",
+    "Krypto": "https://www.ls-tc.de/de/kryptowaehrungen"
 }
 
-# Einzel-Assets für direkten Fokus
-CORE_ASSETS = {
-    "Bitcoin": "DE000A28M8D0", # BTC ETC als Proxy oder Direktlink
-    "Siemens_Energy": "DE000ENER6Y0",
-    "SAP_SE": "DE0007164600"
-}
+def clean_old_data():
+    """Entfernt alle Einträge, die älter als 48 Stunden sind."""
+    if not os.path.exists(CSV_FILE):
+        return
+    
+    cutoff = datetime.now() - timedelta(days=2)
+    rows_to_keep = []
+    
+    try:
+        with open(CSV_FILE, mode='r', newline='') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # Zeitstempel parsen und mit Cutoff vergleichen
+                row_time = datetime.strptime(row['Timestamp'], "%Y-%m-%d %H:%M:%S.%f")
+                if row_time > cutoff:
+                    rows_to_keep.append(row)
+        
+        # CSV mit bereinigten Daten überschreiben
+        with open(CSV_FILE, mode='w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=["Timestamp", "Asset", "Ask_Price"])
+            writer.writeheader()
+            writer.writerows(rows_to_keep)
+    except Exception as e:
+        print(f"[!] Fehler bei Datenbereinigung: {e}", flush=True)
 
-def fetch_table_data(url):
-    """Extrahiert alle Kurse aus einer Tabellenübersicht (Index-Seite)."""
-    assets = []
+def fetch_list(url):
+    extracted = []
     try:
         res = requests.get(url, headers=HEADERS, timeout=10)
         soup = BeautifulSoup(res.text, 'html.parser')
-        # L&S Tabellenstruktur: Suche nach Zeilen in der Kursliste
         rows = soup.find_all("tr")
         for row in rows:
             cols = row.find_all("td")
             if len(cols) >= 3:
-                name = cols[0].text.strip().replace("\n", "")
-                # Der Briefkurs steht bei Indexlisten oft in einer spezifischen Spalte
+                name = cols[0].text.strip().replace("\n", " ")
                 price = cols[2].text.strip().replace('.', '').replace(',', '.')
-                if price and any(char.isdigit() for char in price):
-                    assets.append([name, price])
-    except Exception as e:
-        print(f"Error fetching {url}: {e}")
-    return assets
+                if any(char.isdigit() for char in price):
+                    extracted.append([name, price])
+    except:
+        pass
+    return extracted
 
-def run_sentinel_max():
-    if os.path.exists(CSV_FILE): os.remove(CSV_FILE)
-    
-    with open(CSV_FILE, mode='w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(["Timestamp", "Asset", "Price"])
+def run_sentinel():
+    # Initialer Header, falls Datei nicht existiert
+    if not os.path.exists(CSV_FILE):
+        with open(CSV_FILE, mode='w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(["Timestamp", "Asset", "Ask_Price"])
 
-    print(f"[*] Aureum Sentinel Max gestartet. Scanne DAX, NASDAQ & BTC...")
+    print("[*] Aureum Sentinel 48h-Rolling-Logger gestartet...", flush=True)
 
+    counter = 0
     while True:
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        all_results = []
-
-        # 1. Scrape Index-Listen (Massenabfrage)
+        ts_now = datetime.now()
+        ts_str = ts_now.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        
+        # 1. Daten abrufen
         with ThreadPoolExecutor(max_workers=5) as executor:
-            lists = list(executor.map(fetch_table_data, INDEX_URLS.values()))
-            for l in lists: all_results.extend(l)
-
-        # 2. Schreibe in CSV
+            results = list(executor.map(fetch_list, INDEX_URLS.values()))
+        
+        # 2. In CSV anhängen
         with open(CSV_FILE, mode='a', newline='') as f:
             writer = csv.writer(f)
-            for name, price in all_results:
-                writer.writerow([ts, name, price])
-                # Filter für die Konsole, damit das Log nicht explodiert
-                if "Siemens" in name or "Bitcoin" in name or "SAP" in name:
-                    print(f"[{ts}] {name}: {price} €")
+            for sublist in results:
+                for name, price in sublist:
+                    writer.writerow([ts_str, name, price])
+        
+        # 3. Alle 100 Durchläufe (ca. alle 5-10 Min) alte Daten löschen
+        counter += 1
+        if counter >= 100:
+            clean_old_data()
+            print(f"[{ts_str}] Datenbereinigung durchgeführt (2-Tage-Fenster).", flush=True)
+            counter = 0
 
-        # Da wir jetzt ca. 150 Werte pro Durchgang holen, erhöhen wir das Intervall leicht
-        time.sleep(1)
+        # Feedback im Log
+        print(f"[{ts_str}] Scan OK. {sum(len(x) for x in results)} Assets erfasst.", flush=True)
+        sys.stdout.flush()
+        
+        time.sleep(2) # Kurze Pause zur Stabilisierung
 
 if __name__ == "__main__":
-    run_sentinel_max()
+    run_sentinel()
