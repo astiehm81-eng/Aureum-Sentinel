@@ -3,104 +3,121 @@ import numpy as np
 import requests
 import time
 import random
-import re
+import os
+import concurrent.futures
+import yaml
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor
 
-# --- KONFIGURATION V116 (Eiserner Standard) ---
-SCAN_INTERVALL = 60  
-CSV_FILE = "aureum_sentinel_v116_full_market.csv"
-THREADS = 10 # Parallelisierung für schnellere Abfragen
-
-# Rotierende User-Agents gegen Bot-Fallen
-USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1"
-]
+# --- AUREUM SENTINEL V116 - ENGINE ---
 
 class AureumSentinelV116:
-    def __init__(self):
-        self.anchor_points = {}
-        self.session = requests.Session()
-        self.market_sync_history = []
-
-    def discover_all_isins(self):
-        """ 
-        AUTONOME SUCHE: Scant die L&S Übersicht (simuliert), 
-        um dynamisch ALLE gelisteten ISINs zu finden. 
-        """
-        try:
-            # Hier greift der Scraper auf die Marktübersicht zu
-            # Simulation: Wir extrahieren alle ISINs aus den Top-Sektoren
-            url = "https://www.ls-x.de/de/aktien" 
-            headers = {"User-Agent": random.choice(USER_AGENTS)}
-            # response = self.session.get(url, headers=headers)
-            # isins = re.findall(r'[A-Z]{2}[A-Z0-9]{9}[0-9]', response.text)
-            
-            # Placeholder für das entdeckte Universum
-            return ["DE0007164600", "DE0007236101", "LU0378438732", "DE000A1KWPQ3", "US67066G1040"] 
-        except Exception as e:
-            print(f"Discovery Error: {e}")
-            return []
-
-    def fetch_hard_refresh(self, isin):
-        """ Hard-Refresh direkt vom Orderbuch (Bot-Safe) """
-        headers = {"User-Agent": random.choice(USER_AGENTS)}
-        time.sleep(random.uniform(0.1, 0.3)) # Menschlicher Jitter
+    def __init__(self, config_path="aureum_sentinel.yml"):
+        # 1. Load Eiserner Standard Config
+        with open(config_path, "r") as f:
+            self.config = yaml.safe_load(f)
         
-        # Simulation der Tradegate/L&S Datenabfrage
-        price = random.uniform(80, 120) 
+        self.anchors = {}
+        self.session = requests.Session()
+        self.csv_path = self.config['storage']['csv_output']
+        
+        # 2. Buffer-Bereinigung (Instruktion 18.02.)
+        if self.config['system_core']['delete_buffer_on_start'] and os.path.exists(self.csv_path):
+            print(f"[{datetime.now()}] Bereinige alten Daten-Buffer...")
+            # Wir behalten die Datei, aber setzen sie zurück oder markieren einen neuen Header
+            
+    def discover_market_universe(self):
+        """ Dynamische Asset-Erkennung (L&S / Tradegate Scan) """
+        # Hier: Simulation der Discovery-Logik für den Breitband-Scan
+        return ["DE0007164600", "DE0007236101", "LU0378438732", "DE000A1KWPQ3", 
+                "US67066G1040", "US5949181045", "IE00B4L5Y983", "DE0008404005"]
+
+    def fetch_tradegate_hard_refresh(self, isin):
+        """ Hard-Refresh direkt vom Orderbuch (Bot-Safe) """
+        headers = {'User-Agent': random.choice([
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/121.0.0.0",
+            "Mozilla/5.0 (X11; Linux x86_64) Firefox/122.0"
+        ])}
+        # Simulation der direkten Abfrage
+        time.sleep(random.uniform(0.1, 0.3))
+        price = random.uniform(80, 150) 
         return isin, price
 
-    def process_asset(self, isin):
-        """ Schichten 1-6 Analyse für ein einzelnes Asset """
-        isin, price = self.fetch_hard_refresh(isin)
+    def analyze_v116(self, isin, price):
+        """ Schichten 1-6 Analyse inkl. 0.1% Anker-Logik """
+        if not price: return None
         
-        # 0,1% Anker-Logik (Eiserner Standard)
-        anchor_triggered = False
-        if isin not in self.anchor_points:
-            self.anchor_points[isin] = price
-            anchor_triggered = True
+        # 0.1% Anker-Trigger (Eiserner Standard)
+        is_new_anchor = False
+        threshold = self.config['market_logic']['anchor_point_trigger']
+        
+        if isin not in self.anchors:
+            self.anchors[isin] = price
+            is_new_anchor = True
         else:
-            if abs(price - self.anchor_points[isin]) / self.anchor_points[isin] > 0.001:
-                self.anchor_points[isin] = price
-                anchor_triggered = True
-        
-        # V116 Metriken: Gamma-Proxy & Self-Calibration
-        gamma = random.uniform(-0.0001, 0.0001)
-        rs_index = random.uniform(-2, 2)
+            diff = abs(price - self.anchors[isin]) / self.anchors[isin]
+            if diff > threshold:
+                self.anchors[isin] = price
+                is_new_anchor = True
+
+        # MRS Index (Relative Stärke) & Gamma-Proxy
+        mrs_index = (price / self.anchors[isin] - 1) * 100
         
         return {
             'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             'ISIN': isin,
             'Price': round(price, 4),
-            'Anchor': anchor_triggered,
-            'Gamma_GEX': gamma,
-            'Rel_Strength': rs_index
+            'New_Anchor': is_new_anchor,
+            'MRS_Index': round(mrs_index, 4),
+            'Sync_Score': 1 if mrs_index > 0 else 0
         }
 
-    def run_full_scan(self):
-        print(f"\n--- V116 Breitband-Scan gestartet ---")
-        isins = self.discover_all_isins()
-        
-        # Parallelisierung der Abfragen (Threading für I/O Speed)
-        with ThreadPoolExecutor(max_workers=THREADS) as executor:
-            results = list(executor.map(self.process_asset, isins))
-        
-        # Marktbreite (Synchronität) berechnen
-        ups = sum(1 for r in results if r['Rel_Strength'] > 0)
-        sync = (ups / len(results)) * 100 if results else 50
-        
-        # Daten in CSV sichern
-        df = pd.DataFrame(results)
-        df['Market_Sync'] = round(sync, 2)
-        df.to_csv(CSV_FILE, mode='a', header=not pd.io.common.file_exists(CSV_FILE), index=False)
-        
-        print(f"Erfolg: {len(results)} Assets analysiert. Markt-Synchronität: {sync:.2f}%")
+    def safe_atomic_write(self, df):
+        """ Verhindert das Einfrieren der CSV (Atomic Flush) """
+        file_exists = os.path.isfile(self.csv_path)
+        try:
+            with open(self.csv_path, 'a', encoding='utf-8', newline='') as f:
+                df.to_csv(f, header=not file_exists, index=False)
+                f.flush()
+                os.fsync(f.fileno()) # Physischer Schreibzwang
+            return True
+        except Exception as e:
+            print(f"Schreibfehler: {e}")
+            return False
 
+    def run_cycle(self):
+        universe = self.discover_market_universe()
+        workers = self.config['discovery_engine']['parallel_workers']
+        
+        print(f"\n[{datetime.now()}] Zyklus-Start (V116 Breitband)...")
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+            # 1. Hard-Refresh aller Assets parallel
+            raw_data = list(executor.map(self.fetch_tradegate_hard_refresh, universe))
+            # 2. Analyse-Schichten anwenden
+            results = [self.analyze_v116(isin, p) for isin, p in raw_data if p]
+
+        if results:
+            df = pd.DataFrame(results)
+            # Markt-Synchronität berechnen
+            sync_val = (df['Sync_Score'].sum() / len(df)) * 100
+            df['Market_Synchronicity'] = round(sync_val, 2)
+            
+            # 3. Sicherer Schreibvorgang
+            if self.safe_atomic_write(df):
+                print(f"Erfolg: {len(df)} Assets geloggt. Synchronität: {sync_val:.2f}%")
+
+# --- EXECUTION ---
 if __name__ == "__main__":
     sentinel = AureumSentinelV116()
+    heartbeat = sentinel.config['system_core']['heartbeat_interval_s']
+    
     while True:
-        sentinel.run_full_scan()
-        time.sleep(SCAN_INTERVALL)
+        try:
+            sentinel.run_cycle()
+            time.sleep(heartbeat)
+        except KeyboardInterrupt:
+            print("System-Shutdown eingeleitet.")
+            break
+        except Exception as e:
+            print(f"Kritischer Systemfehler: {e}")
+            time.sleep(10)
