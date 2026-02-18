@@ -43,7 +43,7 @@ def scan_asset(wkn):
     
     try:
         driver.get(f"https://www.ls-tc.de/de/aktie/{wkn}")
-        # Kurze Lese-Simulation (Optimiert auf 8 Worker)
+        # Kurze Lese-Simulation (Optimiert auf 5 Worker)
         time.sleep(3) 
         
         html = driver.page_source
@@ -71,18 +71,18 @@ def scan_asset(wkn):
         driver.quit()
 
 if __name__ == "__main__":
-    print(f"🛡️ AUREUM SENTINEL V61 - 8-WORKER STABILITY MODE")
+    print(f"🛡️ AUREUM SENTINEL V62 - 5-WORKER STABILITY MODE")
     sys.stdout.flush()
     
     start_time = time.time()
     
-    # --- PARALLEL-MODUS: REDUZIERT AUF 8 WORKER ---
-    with ThreadPoolExecutor(max_workers=8) as executor:
+    # --- PARALLEL-MODUS: REDUZIERT AUF 5 WORKER FÜR STABILITÄT ---
+    with ThreadPoolExecutor(max_workers=5) as executor:
         results = list(executor.map(scan_asset, TARGET_WKNS))
     
     # Zusammenfassung & Telegram
     duration = round(time.time() - start_time, 1)
-    summary = f"🛰️ *Sentinel Scan Report (8-Worker)*\n⏱️ Dauer: {duration}s\n---\n"
+    summary = f"🛰️ *Sentinel Scan Report (5-Worker)*\n⏱️ Dauer: {duration}s\n---\n"
     summary += "\n".join(results)
     
     print(summary)
