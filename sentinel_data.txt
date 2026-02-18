@@ -1,4 +1,4 @@
-Zuletzt aktualisiert: 2026-02-18 04:08:53
+Zuletzt aktualisiert: 2026-02-18 04:31:48
 📦 ENER61 | B: - | A: -
 📦 SAP000 | B: - | A: -
 📦 adidas-aktie | B: - | A: -
@@ -13,8 +13,3 @@ Zuletzt aktualisiert: 2026-02-18 04:08:53
 📦 BMW111 | B: - | A: -
 📦 IFX000 | B: - | A: -
 📦 MUV200 | B: - | A: -
-📦 SIE000 | B: - | A: -
-📦 AIR001 | B: - | A: -
-📦 CON000 | B: - | A: -
-📦 RWE000 | B: - | A: -
-📦 TKA000 | B: - | A: -
