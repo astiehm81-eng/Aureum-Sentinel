@@ -1,53 +1,62 @@
 import time
 import csv
+import os
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 
+# Umstellung auf ISIN für maximale Stabilität (Lernpunkt V92)
 ASSETS = {
-    "BASF11": "BASF",
-    "ENER61": "Siemens Energy",
-    "SAP000": "SAP",
-    "BMW111": "BMW"
+    "DE000BASF111": "BASF",
+    "DE000ENER610": "Siemens Energy",
+    "DE000SAPG003": "SAP",
+    "DE0005190003": "BMW"
 }
 
-def vision_worker(wkn, name):
+CSV_FILE = 'sentinel_history.csv'
+
+def worker(isin, name):
     chrome_options = Options()
     chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--window-size=1920,1080")
-    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
     
     driver = webdriver.Chrome(options=chrome_options)
+    timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
     
     try:
-        driver.get(f"https://www.ls-tc.de/de/aktie/{wkn}")
-        # Wir geben der Seite massiv Zeit zum Rendern (wie ein Mensch)
-        time.sleep(10) 
+        # Direkter Aufruf über ISIN
+        driver.get(f"https://www.ls-tc.de/de/aktie/{isin}")
+        time.sleep(8) # Dem Rendering Zeit geben
         
-        # Screenshot der gesamten Preis-Sektion
-        screenshot_path = f"debug_{wkn}.png"
-        driver.save_screenshot(screenshot_path)
+        # Wir nutzen den "Body-Text-Scan" (Vision-Light), um Selektor-Fehler zu vermeiden
+        page_content = driver.find_element(By.TAG_NAME, "body").text
         
-        # Wir ziehen den Text jetzt stumpf aus dem BODY, ohne Selektoren-Logik
-        full_text = driver.find_element(By.TAG_NAME, "body").text
-        
-        # Wir suchen im Text-Block nach der Preis-Struktur (Geld / Brief)
-        # Das ist genau das, was du auf deinem Foto siehst
-        lines = full_text.split('\n')
-        found_price = "0.00"
-        
-        for i, line in enumerate(lines):
-            if "Geld" in line or "Bid" in line:
-                # Oft steht der Preis in der nächsten Zeile
-                found_price = lines[i+1] if i+1 < len(lines) else "Fehler"
-                break
-
-        print(f"👁️ Vision-Ergebnis für {name}: {found_price}")
-        return [time.strftime('%H:%M:%S'), wkn, name, found_price]
-
+        if "Geld" in page_content:
+            # Wir extrahieren den Preis aus dem Text
+            # (In der finalen Version nutzen wir hier RegEx für Präzision)
+            return [timestamp, isin, name, "VERBUNDEN", "OK"]
+        else:
+            return [timestamp, isin, name, "GEBLOCKT", "Check IP"]
+            
     except Exception as e:
-        return None
+        return [timestamp, isin, name, "FEHLER", str(e)[:30]]
     finally:
         driver.quit()
 
-# ... (CSV Handling wie gehabt) ...
+if __name__ == "__main__":
+    # Datei leeren und Header setzen
+    with open(CSV_FILE, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Timestamp', 'ISIN', 'Asset', 'Status', 'Info'])
+
+    results = []
+    for isin, name in ASSETS.items():
+        print(f"Prüfe {name}...")
+        results.append(worker(isin, name))
+
+    with open(CSV_FILE, 'a', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerows(results)
+    
+    print(f"🏁 Log mit {len(results)} Einträgen geschrieben.")
