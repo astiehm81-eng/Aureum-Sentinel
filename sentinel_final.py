@@ -9,44 +9,45 @@ ASSETS = {
     "DE0005190003": "BMW"
 }
 
-def fetch_rpc_data(isin, name, period="intraday"):
+def fetch_stealth(isin, name):
+    # Wir tarnen uns als mobiles Endgerät (wie dein Handy im Screenshot)
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Referer": f"https://www.ls-tc.de/de/aktie/{isin}"
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1",
+        "Accept": "application/json",
+        "Referer": "https://www.ls-tc.de/de/",
+        "X-Requested-With": "XMLHttpRequest"
     }
     
-    # Der direkte Daten-Kanal für die Kurve
-    url = f"https://www.ls-tc.de/_rpc/json/instrument/chart/data?isin={isin}&period={period}"
+    # Wir nutzen den Chart-Endpoint, aber mit einem Cache-Buster Zeitstempel
+    url = f"https://www.ls-tc.de/_rpc/json/instrument/chart/data?isin={isin}&period=intraday&_={int(time.time()*1000)}"
     
     try:
-        response = requests.get(url, headers=headers, timeout=10)
-        data = response.json()
+        session = requests.Session()
+        # Vorab-Besuch der Hauptseite für Session-Cookies
+        session.get("https://www.ls-tc.de/de/", headers=headers, timeout=5)
         
-        # Wir nehmen den allerletzten Punkt der Kurve (Series -> Intraday -> Letzter Eintrag)
-        if "series" in data and "intraday" in data["series"]:
-            points = data["series"]["intraday"]["data"]
-            if points:
-                last_point = points[-1] # [Timestamp, Price]
-                price = last_point[1]
-                print(f"✅ {name} ({period}): {price} €")
-                return [time.strftime('%Y-%m-%d %H:%M:%S'), isin, name, price, period]
+        response = session.get(url, headers=headers, timeout=10)
         
-        return [time.strftime('%Y-%m-%d %H:%M:%S'), isin, name, "0.00", "EMPTY_RPC"]
+        if response.status_code == 200:
+            data = response.json()
+            if "series" in data and "intraday" in data["series"]:
+                points = data["series"]["intraday"]["data"]
+                if points:
+                    price = points[-1][1]
+                    print(f"✅ {name}: {price} €")
+                    return [time.strftime('%H:%M:%S'), isin, name, price, "SUCCESS"]
+        
+        return [time.strftime('%H:%M:%S'), isin, name, "0.00", f"HTTP_{response.status_code}"]
     except Exception as e:
-        return [time.strftime('%Y-%m-%d %H:%M:%S'), isin, name, "0.00", f"RPC_ERR: {str(e)[:15]}"]
+        return [time.strftime('%H:%M:%S'), isin, name, "0.00", f"ERR_{type(e).__name__}"]
 
 if __name__ == "__main__":
+    results = []
+    for isin, name in ASSETS.items():
+        results.append(fetch_stealth(isin, name))
+        time.sleep(2) # Sanfte Pausen gegen Bot-Erkennung
+
     with open('sentinel_history.csv', 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['Timestamp', 'ISIN', 'Asset', 'Price', 'Type'])
-        
-        for isin, name in ASSETS.items():
-            # Erst Intraday (für den 161,xx Check)
-            res_intra = fetch_rpc_data(isin, name, "intraday")
-            writer.writerow(res_intra)
-            
-            # Dann 1 Monat (für die Historie)
-            res_month = fetch_rpc_data(isin, name, "history")
-            writer.writerow(res_month)
-            
-    print("🏁 RPC-Sentinel Run beendet. Historie & Intraday synchronisiert.")
+        writer.writerow(['Time', 'ISIN', 'Asset', 'Price', 'Status'])
+        writer.writerows(results)
