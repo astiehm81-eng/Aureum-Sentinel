@@ -1,44 +1,42 @@
-name: Aureum Sentinel V52 Execution
+# ======================================================
+# AUREUM SENTINEL - EISERNER STANDARD V116 (FINAL)
+# ======================================================
 
-on:
-  workflow_dispatch: # Das hier erzwingt den "Run workflow" Button!
-  schedule:
-    - cron: '*/20 * * * *' # Automatischer Start alle 20 Minuten
+system_core:
+  version: "1.16.0"
+  process_name: "Aureum Sentinel"
+  standard: "V42_Eisener_Standard"
+  heartbeat_s: 60                 # 1-Minuten-Intervall für Breitband
+  delete_buffer_on_start: true    # Erzwungener Hard-Refresh
+  self_learning_mode: true        # Korrigiert Bias in Echtzeit
 
-jobs:
-  run-sentinel:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write # Erlaubt das Hochladen der CSV
+market_logic:
+  strategy: "Hard-Refresh-Tradegate"
+  noise_filter: false             # DEAKTIVIERT laut Anweisung
+  anchor_threshold: 0.001         # 0.1% Regel für neue Fixpunkte
+  target_state: "Aureum Protocol"
+  optimizer: "Swarm-Optimizer"
 
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+analysis_layers:
+  - layer_1: "Fourier-Wavelet-Denoising"
+  - layer_2: "Kriging-Spatial-Mapping"
+  - layer_3: "Monte-Carlo-Paths-1M"
+  - layer_4: "Gamma-Exposure-Proxy"
+  - layer_5: "Relative-Strength-Matrix"
+  - layer_6_context:
+      enabled: true
+      modules: ["NLP-Sentiment", "DXY-Matrix", "Supply-Chain-Cascade"]
+      impact_variance: "dynamic"
+      time_decay: 0.85
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
+discovery_engine:
+  mode: "Full-Market-Scan"
+  sources: ["Tradegate", "LS-Exchange"]
+  parallel_workers: 15
+  bot_protection:
+    header_rotation: true
+    jitter: [0.1, 0.4]
 
-      - name: Install Dependencies
-        run: |
-          pip install requests beautifulsoup4 lxml
-
-      - name: Execute Aureum Sentinel
-        run: python sentinel_final.py # Stelle sicher, dass die Datei im Repo so heißt!
-
-      - name: Commit and Push Market Data
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          
-          # Sicherstellen, dass die Datei existiert
-          git add sentinel_market_data.csv
-          
-          # Nur committen, wenn es Änderungen gibt
-          if git diff --staged --quiet; then
-            echo "Keine Änderungen zum Hochladen."
-          else
-            git commit -m "🛡️ Aureum Live-Update: $(date +'%H:%M:%S')"
-            git push origin main
-          fi
+storage:
+  csv_output: "aureum_sentinel_v116_data.csv"
+  historical_provider: "Yahoo"    # Für Daten > 1 Woche
