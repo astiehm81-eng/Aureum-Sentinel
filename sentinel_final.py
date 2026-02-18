@@ -1,99 +1,71 @@
-import sys
-import time  # <--- Das hat gefehlt!
-import re
 import requests
-import os
 import csv
+import os
+import time
 from datetime import datetime
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 
-# --- 1. ASSET-DEFINITION ---
-CORE_WKNS = ["ENER61", "SAP000", "A1EWWW", "A0AE1X"] 
-MARKET_POOL = [
-    "BASF11", "DTE000", "VOW300", "ADS000", "DBK100", 
-    "ALV001", "BAY001", "BMW111", "IFX000", "MUV200"
+# Assets laut deiner Vorgabe (erweiterbar)
+ASSETS = [
+    "ENER61", "SAP000", "A1EWWW", "A0AE1X", "BASF11", "DTE000", "VOW300", 
+    "ADS000", "DBK100", "ALV001", "BAY001", "BMW111", "IFX000", "MUV200"
 ]
 
-def setup_driver():
-    options = Options()
-    options.add_argument('--headless=new')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--disable-gpu')
-    prefs = {"profile.managed_default_content_settings.images": 2, 
-             "profile.default_content_settings.stylesheets": 2}
-    options.add_experimental_option("prefs", prefs)
-    service = Service(ChromeDriverManager().install())
-    return webdriver.Chrome(service=service, options=options)
-
-def scan_batch(driver, wkn_list):
-    results = []
-    history_data = []
-    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-    for idx, wkn in enumerate(wkn_list):
-        if idx > 0: driver.execute_script("window.open('');")
-        driver.switch_to.window(driver.window_handles[idx])
-        driver.get(f"https://www.ls-tc.de/de/aktie/{wkn}")
+def get_robust_history(wkn):
+    """Holt die maximale Historie direkt vom L&S JSON-Endpunkt."""
+    url = f"https://www.ls-tc.de/_rpc/json/chart/chart.json?symbol={wkn}&range=max"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json'
+    }
     
-    time.sleep(7.0)
+    for attempt in range(3):  # 3 Versuche bei Netzwerkfehlern
+        try:
+            response = requests.get(url, headers=headers, timeout=15)
+            response.raise_for_status()
+            data = response.json()
+            
+            # Tiefe Pfad-Validierung, damit das Skript bei Strukturänderungen nicht crasht
+            series = data.get('series', {}).get('main', {}).get('data', [])
+            if not series:
+                print(f"⚠️ Keine Daten für {wkn} gefunden.")
+                return []
+            
+            rows = []
+            for entry in series:
+                if len(entry) >= 2:
+                    dt = datetime.fromtimestamp(entry[0] / 1000).strftime('%Y-%m-%d %H:%M:%S')
+                    price = float(entry[1])
+                    rows.append([dt, wkn, price])
+            
+            print(f"✅ {wkn}: {len(rows)} Datenpunkte extrahiert.")
+            return rows
 
-    for handle in driver.window_handles:
-        driver.switch_to.window(handle)
-        html = driver.page_source
-        url = driver.current_url
-        wkn_label = re.search(r'aktie/([^/?#]+)', url).group(1) if "aktie/" in url else "Unknown"
-        
-        bid = re.search(r'id="push-bid".*?>([\d,.]+)<', html)
-        ask = re.search(r'id="push-ask".*?>([\d,.]+)<', html)
-        news = re.findall(r'class="news-teaser-headline".*?>(.*?)<', html)
-        
-        b_val = bid.group(1) if bid else "-"
-        a_val = ask.group(1) if ask else "-"
-        n_val = news[0][:100] if news else "-"
-        
-        results.append(f"📦 {wkn_label} | B: {b_val} | A: {a_val}")
-        history_data.append([ts, wkn_label, b_val, a_val, n_val])
-
-    while len(driver.window_handles) > 1:
-        driver.switch_to.window(driver.window_handles[-1]); driver.close()
-    driver.switch_to.window(driver.window_handles[0])
-    return results, history_data
+        except Exception as e:
+            print(f"🔄 Versuch {attempt+1} für {wkn} fehlgeschlagen: {e}")
+            time.sleep(2) # Kurze Pause vor Neustart
+    return []
 
 if __name__ == "__main__":
     start_time = time.time()
-    driver = setup_driver()
-    all_results = []
-    all_history = []
-    
-    try:
-        # Core Assets
-        res, hist = scan_batch(driver, CORE_WKNS)
-        all_results.extend(res)
-        all_history.extend(hist)
-        
-        # Markt-Pool
-        res, hist = scan_batch(driver, MARKET_POOL)
-        all_results.extend(res)
-        all_history.extend(hist)
-    finally:
-        driver.quit()
+    master_file = 'sentinel_deep_history.csv'
+    all_data = []
 
-    # CSV HISTORIE SCHREIBEN (Append)
-    csv_file = 'sentinel_history.csv'
-    file_exists = os.path.isfile(csv_file)
-    with open(csv_file, 'a', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        if not file_exists:
-            writer.writerow(['Timestamp', 'WKN', 'Bid', 'Ask', 'News'])
-        writer.writerows(all_history)
+    print(f"🚀 Starte Deep-History Import für {len(ASSETS)} Assets...")
 
-    # AKTUELLER STAND TXT (Overwrite)
-    with open("sentinel_data.txt", "w", encoding="utf-8") as f:
-        f.write(f"Zuletzt aktualisiert: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write("\n".join(all_results))
+    for wkn in ASSETS:
+        asset_data = get_robust_history(wkn)
+        all_data.extend(asset_data)
+        time.sleep(0.5) # Anti-Blocking Delay
+
+    if all_data:
+        # Robustes Schreiben: Überschreibt die Master-Datei mit dem kompletten neuen Stand
+        try:
+            with open(master_file, mode='w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(['Timestamp', 'WKN', 'Price'])
+                writer.writerows(all_data)
+            print(f"💾 Datei gespeichert: {master_file} ({len(all_data)} Zeilen)")
+        except IOError as e:
+            print(f"❌ Dateifehler: {e}")
     
-    print(f"✅ V75 erfolgreich in {round(time.time()-start_time, 1)}s")
+    print(f"🏁 Prozess beendet in {round(time.time() - start_time, 2)}s")
