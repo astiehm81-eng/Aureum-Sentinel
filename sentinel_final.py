@@ -1,87 +1,65 @@
-import requests
+import yfinance as yf
+import pandas as pd
 import csv
 import time
-import os
 
 ASSETS = {
-    "DE000ENER610": "Siemens Energy",
-    "DE000BASF111": "BASF",
-    "DE000SAPG003": "SAP",
-    "DE0005190003": "BMW"
+    "ENR.DE": "Siemens Energy",
+    "BAS.DE": "BASF",
+    "SAP.DE": "SAP",
+    "BMW.DE": "BMW"
 }
 
-def fetch_max_history(isin, name):
-    print(f"📡 Starte Deep-Scan (MAX) für {name}...")
-    # Mode history liefert bei Tradegate das Maximum der verfügbaren Rückschau
-    url = f"https://www.tradegate.de/export.php?isin={isin}&mode=history"
-    headers = {"User-Agent": "Mozilla/5.0"}
+def calibrate_and_sync(ticker, name):
+    print(f"🔍 Kalibrierung läuft für {name}...")
+    stock = yf.Ticker(ticker)
     
-    try:
-        response = requests.get(url, headers=headers, timeout=20)
-        if response.status_code == 200:
-            lines = response.text.strip().split('\n')
-            data_points = []
-            for line in lines[1:]:
-                parts = line.split(';')
-                if len(parts) >= 5:
-                    date = parts[0]
-                    # Preis-Normierung auf Punkt-Format
-                    close_p = parts[4].replace(',', '.')
-                    data_points.append({'date': date, 'price': float(close_p)})
-            
-            # Sortierung sicherstellen (alt nach neu)
-            data_points.sort(key=lambda x: time.strptime(x['date'], '%d.%m.%Y'))
-            return data_points
-    except Exception as e:
-        print(f"❌ Fehler bei {name}: {e}")
-    return []
-
-def get_current_tick(isin):
-    # Realtime-Check zur Verifizierung des "Last Stand"
-    url = f"https://www.tradegate.de/refresh.php?isin={isin}"
-    try:
-        res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
-        # Wir extrahieren den Last-Preis (3. Position)
-        parts = res.text.split('|')
-        if len(parts) > 2:
-            return float(parts[2].replace(',', '.'))
-    except:
+    # 1. Historie holen (1 Monat zur Kalibrierung)
+    hist = stock.history(period="1mo", interval="1d")
+    
+    # 2. Intraday holen (Heute)
+    intra = stock.history(period="1d", interval="1m")
+    
+    if hist.empty or intra.empty:
         return None
-    return None
+
+    # Prüfung: Passt der gestrige Schlusskurs zum heutigen Start?
+    yesterday_close = hist['Close'].iloc[-1]
+    today_open = intra['Open'].iloc[0]
+    drift = abs(yesterday_close - today_open)
+    drift_pct = (drift / yesterday_close) * 100
+
+    # Anzeige der Kalibrierung im Log
+    print(f"   📊 Check: Gestern {yesterday_close:.2f} | Heute Open {today_open:.2f}")
+    print(f"   ⚖️ Drift: {drift_pct:.4f}%")
+
+    if drift_pct > 1.5:
+        print(f"   ⚠️ Warnung: Hoher Drift bei {name}! Möglicher Gap.")
+    else:
+        print(f"   ✅ {name} ist kalibriert.")
+
+    # Daten zusammenführen (History + Heute Intraday)
+    combined = []
+    # Historie (Tagesbasis)
+    for ts, row in hist.iterrows():
+        combined.append([ts.strftime('%Y-%m-%d'), ticker, name, round(row['Close'], 2), "HIST"])
+    
+    # Intraday (Minutenbasis - Letzte 60 Min zur Verifizierung)
+    for ts, row in intra.tail(60).iterrows():
+        combined.append([ts.strftime('%Y-%m-%d %H:%M'), ticker, name, round(row['Close'], 2), "INTRA"])
+        
+    return combined
 
 if __name__ == "__main__":
-    final_output = []
-    summary = []
-
-    for isin, name in ASSETS.items():
-        # 1. Gesamte verfügbare Historie holen
-        history = fetch_max_history(isin, name)
-        
-        # 2. Den absolut letzten Realtime-Stand zur Verifizierung
-        current_p = get_current_tick(isin)
-        
-        if history:
-            # Lückenlosigkeit prüfen: Wir hängen den heutigen Tick an, 
-            # falls das Archiv von gestern ist
-            today_str = time.strftime('%d.%m.%Y')
-            if history[-1]['date'] != today_str and current_p:
-                history.append({'date': today_str, 'price': current_p})
-            
-            # Für die CSV aufbereiten
-            for entry in history:
-                final_output.append([entry['date'], isin, name, entry['price']])
-            
-            summary.append(f"{name}: {history[0]['date']} bis heute ({len(history)} Tage) | Aktuell: {current_p} €")
-
-    # 3. Lückenloser Export
-    with open('sentinel_history.csv', 'w', newline='', encoding='utf-8') as f:
+    full_db = []
+    for ticker, name in ASSETS.items():
+        data = calibrate_and_sync(ticker, name)
+        if data:
+            full_db.extend(data)
+    
+    with open('sentinel_history.csv', 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['Datum', 'ISIN', 'Asset', 'Schlusskurs'])
-        writer.writerows(final_output)
+        writer.writerow(['Timestamp', 'ID', 'Asset', 'Price', 'Type'])
+        writer.writerows(full_db)
 
-    # 4. Verifizierung für dich im Log
-    print("\n--- 🛡️ AUREUM SENTINEL VERIFIKATION ---")
-    for s in summary:
-        print(s)
-    print("---------------------------------------")
-    print(f"🏁 Lückenloser Datensatz gespeichert. Bereit für Inkremental-Modus.")
+    print("\n🏁 Kalibrierung abgeschlossen. Daten sind synchron.")
