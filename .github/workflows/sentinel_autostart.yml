@@ -1,39 +1,48 @@
-name: Aureum Sentinel - Deep Scan & Calibration
+name: Aureum Sentinel V42 Data Interface
 
 on:
   schedule:
-    # Führt den Check alle 30 Minuten während der Handelszeit aus (Mo-Fr)
-    - cron: '*/30 7-21 * * 1-5'
-  workflow_dispatch: # Erlaubt manuellen Start
-
-permissions:
-  contents: write # Wichtig für das Hochladen der CSV
+    - cron: '*/30 * * * *' # Läuft alle 30 Minuten automatisch
+  workflow_dispatch:      # Ermöglicht dir den manuellen Start per Button
 
 jobs:
-  build:
+  run-sentinel:
     runs-on: ubuntu-latest
+    
+    # WICHTIG: Erlaubt dem Bot das Schreiben/Pushen in dein Repository
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4 # Korrigierter Pfad
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.10'
 
       - name: Install Dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install yfinance pandas requests
+          pip install requests beautifulsoup4
 
-      - name: Run Aureum Sentinel
-        run: python sentinel_final.py
-
-      - name: Commit and Push Results
+      - name: Run Sentinel Scraper
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add sentinel_history.csv
-          git commit -m "Sentinel Update: MAX-Calibration [$(date)]" || echo "No changes to commit"
-          git push
+          # Das Python-Skript beendet sich nach 20 Min selbst (RUNTIME_LIMIT_SECONDS)
+          # Wir nutzen trotzdem ein Sicherheits-Timeout von GitHub
+          timeout 1300s python sentinel_final.py || echo "Zeitfenster erreicht, starte Datensicherung."
+
+      - name: Commit and Push CSV Interface
+        run: |
+          git config --local user.email "sentinel-bot@github.com"
+          git config --local user.name "Aureum-Sentinel-Bot"
+          
+          # Sicherstellen, dass die Datei existiert, bevor wir adden
+          if [ -f sentinel_market_data.csv ]; then
+            git add sentinel_market_data.csv
+            # [skip ci] verhindert, dass der Push einen neuen Run auslöst
+            git commit -m "Update Rolling 48h Market Data [skip ci]" || echo "Keine neuen Daten zum Committen"
+            git push
+          else
+            echo "CSV Datei wurde nicht gefunden. Abbruch."
+          fi
