@@ -1,42 +1,37 @@
-name: Aureum Sentinel V42 Broad-Scan
+name: Aureum Sentinel V52 Execution
 
 on:
+  workflow_dispatch: # Erlaubt manuellen Start
   schedule:
-    - cron: '*/20 * * * *' # Startet alle 20 Minuten
-  workflow_dispatch:      # Manueller Start möglich
+    - cron: '*/20 * * * *' # Läuft alle 20 Minuten automatisch
 
 jobs:
   run-sentinel:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write # ESSENZIELL: Erlaubt dem Bot das Schreiben in dein Repo
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
       - name: Install Dependencies
-        run: pip install requests beautifulsoup4
-
-      - name: Run Sentinel Broad-Scan
         run: |
-          # Führt das Skript aus (15 Min Sammelzeit)
-          python sentinel_final.py
+          pip install requests beautifulsoup4 lxml
 
-      - name: Clean and Commit Data
+      - name: Execute Aureum Sentinel
+        run: python sentinel_final.py # Hier sicherstellen, dass der Name stimmt
+
+      - name: Commit and Push Market Data
         run: |
-          git config --local user.email "sentinel-bot@github.com"
-          git config --local user.name "Aureum-Sentinel-Bot"
-          
-          # Sicherstellen, dass die CSV existiert
-          if [ -f sentinel_market_data.csv ]; then
-            git add sentinel_market_data.csv
-            # Committet die neuen Daten inkl. Spreads und News
-            git commit -m "Sentinel V42: 15min Broad-Scan & 48h-Cleanup [skip ci]" || echo "Keine Änderungen"
-            git push
-          fi
+          git config --global user.name "Aureum-Sentinel-Bot"
+          git config --global user.email "sentinel@aureum.de"
+          git add sentinel_market_data.csv
+          # Nur committen, wenn sich die Datei wirklich geändert hat
+          git commit -m "🛡️ V52 Update: Market Data [$(date +'%Y-%m-%d %H:%M:%S')]" || exit 0
+          git push
