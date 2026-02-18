@@ -2,7 +2,9 @@ import yfinance as yf
 import pandas as pd
 import csv
 import time
+from datetime import datetime
 
+# Deine Kern-Assets für den Kurs-Check
 ASSETS = {
     "ENR.DE": "Siemens Energy",
     "BAS.DE": "BASF",
@@ -10,50 +12,52 @@ ASSETS = {
     "BMW.DE": "BMW"
 }
 
-def fetch_and_calibrate_max(ticker, name):
-    print(f"📡 Deep-Scan & Kalibrierung (MAX) für {name}...")
+def fetch_and_verify_data(ticker, name):
+    print(f"📡 Starte Deep-Scan & Kalibrierung für {name}...")
     stock = yf.Ticker(ticker)
     
-    # 1. Gesamte Historie laden
-    df = stock.history(period="max", interval="1d")
-    if df.empty:
+    # 1. MAX-Historie laden (Tagesbasis)
+    df_hist = stock.history(period="max", interval="1d")
+    
+    # 2. Intraday-Daten laden (Minutenbasis für heute)
+    df_intra = stock.history(period="1d", interval="1m")
+    
+    if df_hist.empty:
         return []
 
-    # 2. Lückenlosigkeit sicherstellen (Wochenenden/Feiertage füllen)
-    # Wir erstellen einen lückenlosen Zeitindex
-    full_index = pd.date_range(start=df.index[0], end=df.index[-1], freq='D')
-    df = df.reindex(full_index)
-    df['Close'] = df['Close'].ffill() # Letzten Kurs bei Lücken übernehmen
+    # 3. Lückenlosigkeit erzwingen (Forward-Fill für Feiertage)
+    # Erstellt einen lückenlosen Kalender vom Start bis heute
+    full_range = pd.date_range(start=df_hist.index[0], end=pd.Timestamp.now(tz='Europe/Berlin'), freq='D')
+    df_hist = df_hist.reindex(full_range).ffill()
     
-    # 3. Intraday-Abgleich (Letzte 24h in Minuten-Auflösung für den 'Last Stand')
-    intra = stock.history(period="1d", interval="1m")
+    combined_data = []
     
-    data_output = []
-    # Historische Daten (Tage)
-    for ts, row in df.iterrows():
-        data_output.append([ts.strftime('%Y-%m-%d'), ticker, name, round(row['Close'], 2), "HIST_DAILY"])
+    # Historie aufbereiten
+    for ts, row in df_hist.iterrows():
+        combined_data.append([ts.strftime('%Y-%m-%d'), ticker, name, round(row['Close'], 2), "HISTORY"])
     
-    # Intraday-Daten (Minuten von heute für die Echtzeit-Verifizierung)
-    if not intra.empty:
-        for ts, row in intra.iterrows():
-            data_output.append([ts.strftime('%Y-%m-%d %H:%M'), ticker, name, round(row['Close'], 2), "INTRA_TICK"])
+    # Intraday-Verifizierung (Die letzten Ticks von heute anhängen)
+    if not df_intra.empty:
+        for ts, row in df_intra.tail(10).iterrows(): # Die letzten 10 Minuten für hohe Präzision
+            combined_data.append([ts.strftime('%Y-%m-%d %H:%M'), ticker, name, round(row['Close'], 2), "INTRADAY_VERIFY"])
 
-    # Verifizierung im Log
-    last_price = data_output[-1][3]
-    print(f"   ✅ {name} kalibriert. {len(data_output)} Punkte. Aktuell: {last_price} €")
-    return data_output
+    # Finaler Verifizierungs-Check im Log
+    last_val = combined_data[-1][3]
+    print(f"   ✅ {name} kalibriert: {len(combined_data)} Datenpunkte. Letzter Stand: {last_val} €")
+    return combined_data
 
 if __name__ == "__main__":
-    final_db = []
+    all_records = []
     for ticker, name in ASSETS.items():
-        data = fetch_and_calibrate_max(ticker, name)
-        if data:
-            final_db.extend(data)
-    
-    # Speichern der lückenlosen "Goldenen Quelle"
-    with open('sentinel_history.csv', 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(['Timestamp', 'ID', 'Asset', 'Price', 'Type'])
-        writer.writerows(final_db)
+        records = fetch_and_verify_data(ticker, name)
+        if records:
+            all_records.extend(records)
+        time.sleep(1) # Schutz gegen API-Sperren
 
-    print("\n🏁 Sentinel V110: MAX-Datenbank lückenlos synchronisiert.")
+    # Speichern der lückenlosen Datenbank
+    with open('sentinel_history.csv', 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Timestamp', 'ID', 'Asset', 'Price', 'Source_Type'])
+        writer.writerows(all_records)
+
+    print(f"\n🏁 Sentinel V111: Datenbank MAX erfolgreich synchronisiert.")
