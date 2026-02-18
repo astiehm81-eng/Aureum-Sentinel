@@ -1,50 +1,66 @@
 import time
 import csv
+import os
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 
+# Validierte ISINs für Siemens Energy (Ziel: 161,xx) und BASF (Ziel: 50,74)
 ASSETS = {
     "DE000ENER610": "Siemens Energy",
-    "DE000BASF111": "BASF"
+    "DE000BASF111": "BASF",
+    "DE000SAPG003": "SAP",
+    "DE0005190003": "BMW"
 }
 
-def scan_direct(isin, name):
+CSV_FILE = 'sentinel_history.csv'
+
+def scan_asset(isin, name):
     chrome_options = Options()
     chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--window-size=1920,1080")
-    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
     
     driver = webdriver.Chrome(options=chrome_options)
-    results = []
-
+    timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+    
     try:
-        # 1. Hauptseite laden
+        # Direkter Aufruf der Asset-Seite
         driver.get(f"https://www.ls-tc.de/de/aktie/{isin}")
-        time.sleep(5)
+        time.sleep(7) # Wartezeit für das Rendering der Kurve
         
-        # 2. Versuch: Wir erzwingen den Zeitraum-Wechsel per JavaScript
-        # Das umgeht Klick-Blockaden durch Overlays
-        periods = {"intraday": "Intraday", "1M": "1 Monat"}
+        # Extraktion des Preises direkt aus dem DOM
+        # Wir nehmen den Bid-Preis, der auch die Kurve (Intraday) definiert
+        price_element = driver.find_element(By.CSS_SELECTOR, ".price-box .bid span")
+        raw_price = price_element.text
+        clean_price = raw_price.replace('.', '').replace(',', '.')
         
-        for p_key, p_name in periods.items():
-            print(f"Scanne {name} Zeitraum: {p_name}...")
-            
-            # Wir suchen den Preis im sichtbaren Feld nach einer kurzen Wartezeit
-            # (In der V94.1 nehmen wir den aktuellen Bid als Anker für die Kurve)
-            try:
-                bid_val = driver.find_element(By.CSS_SELECTOR, ".price-box .bid span").text
-                clean_val = bid_val.replace('.', '').replace(',', '.')
-                results.append([time.strftime('%H:%M:%S'), isin, name, clean_val, p_name])
-            except:
-                results.append([time.strftime('%H:%M:%S'), isin, name, "ERR", p_name])
-
-        return results
-
+        print(f"✅ {name}: {clean_price} € erfasst.")
+        return [timestamp, isin, name, clean_price, "Intraday"]
+        
     except Exception as e:
-        return None
+        print(f"❌ Fehler bei {name}: {str(e)[:50]}")
+        return [timestamp, isin, name, "0.00", "ERROR"]
     finally:
         driver.quit()
 
 if __name__ == "__main__":
-    # ... (CSV Logik wie gehabt) ...
+    # 1. CSV Initialisierung
+    with open(CSV_FILE, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Timestamp', 'ISIN', 'Asset', 'Price', 'Type'])
+
+    # 2. Sequentieller Scan zur Vermeidung von Memory-Overload auf GitHub
+    all_data = []
+    for isin, asset_name in ASSETS.items():
+        result = scan_asset(isin, asset_name)
+        if result:
+            all_data.append(result)
+
+    # 3. Daten wegschreiben
+    with open(CSV_FILE, 'a', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerows(all_data)
+    
+    print(f"🏁 Sentinel-Run beendet. {len(all_data)} Werte gesichert.")
