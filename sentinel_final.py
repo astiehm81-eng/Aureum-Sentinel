@@ -1,62 +1,64 @@
 import time
 import csv
-import os
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
-# Umstellung auf ISIN für maximale Stabilität (Lernpunkt V92)
 ASSETS = {
-    "DE000BASF111": "BASF",
     "DE000ENER610": "Siemens Energy",
-    "DE000SAPG003": "SAP",
-    "DE0005190003": "BMW"
+    "DE000BASF111": "BASF"
 }
 
-CSV_FILE = 'sentinel_history.csv'
-
-def worker(isin, name):
+def scan_curve(isin, name):
     chrome_options = Options()
     chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
     
     driver = webdriver.Chrome(options=chrome_options)
-    timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-    
+    wait = WebDriverWait(driver, 15)
+    results = []
+
     try:
-        # Direkter Aufruf über ISIN
         driver.get(f"https://www.ls-tc.de/de/aktie/{isin}")
-        time.sleep(8) # Dem Rendering Zeit geben
         
-        # Wir nutzen den "Body-Text-Scan" (Vision-Light), um Selektor-Fehler zu vermeiden
-        page_content = driver.find_element(By.TAG_NAME, "body").text
+        # Zeiträume die wir nacheinander durchschalten
+        # Die IDs/Texte entsprechen den Buttons "Intraday", "1 Monat"
+        periods = ["Intraday", "1 Monat"]
         
-        if "Geld" in page_content:
-            # Wir extrahieren den Preis aus dem Text
-            # (In der finalen Version nutzen wir hier RegEx für Präzision)
-            return [timestamp, isin, name, "VERBUNDEN", "OK"]
-        else:
-            return [timestamp, isin, name, "GEBLOCKT", "Check IP"]
+        for period in periods:
+            # 1. Button finden und klicken (Steuerung der Kurve)
+            button = wait.until(EC.element_to_be_clickable((By.XPATH, f"//button[contains(text(), '{period}')]")))
+            driver.execute_script("arguments[0].click();", button)
+            time.sleep(3) # Zeit für den Chart-Wechsel
             
+            # 2. Den aktuellsten Wert aus der nun aktiven Kurve ziehen
+            # Wir suchen den Kurs im Highcharts-Container oder dem Preis-Feld
+            price_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".price-box .bid span")))
+            current_val = price_element.text.replace('.', '').replace(',', '.')
+            
+            results.append([time.strftime('%Y-%m-%d %H:%M:%S'), isin, name, current_val, period])
+            print(f"✅ {name} ({period}): {current_val}")
+
+        return results
+
     except Exception as e:
-        return [timestamp, isin, name, "FEHLER", str(e)[:30]]
+        print(f"❌ Fehler beim Kurven-Scan ({name}): {e}")
+        return None
     finally:
         driver.quit()
 
 if __name__ == "__main__":
-    # Datei leeren und Header setzen
-    with open(CSV_FILE, 'w', newline='') as f:
+    # CSV Reset
+    with open('sentinel_history.csv', 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['Timestamp', 'ISIN', 'Asset', 'Status', 'Info'])
+        writer.writerow(['Timestamp', 'ISIN', 'Asset', 'Price', 'Period'])
 
-    results = []
     for isin, name in ASSETS.items():
-        print(f"Prüfe {name}...")
-        results.append(worker(isin, name))
-
-    with open(CSV_FILE, 'a', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerows(results)
-    
-    print(f"🏁 Log mit {len(results)} Einträgen geschrieben.")
+        data = scan_curve(isin, name)
+        if data:
+            with open('sentinel_history.csv', 'a', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerows(data)
