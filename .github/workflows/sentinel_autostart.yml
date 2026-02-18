@@ -1,14 +1,14 @@
-name: Aureum Sentinel V74
+name: Aureum Sentinel V75
 on:
   schedule:
     - cron: '*/15 * * * *' # Alle 15 Minuten
-  workflow_dispatch: # Ermöglicht manuellen Start per Button
+  workflow_dispatch: # Erlaubt manuellen Start per Knopfdruck
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write # Wichtig: Erlaubt dem Bot das Speichern der CSV
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: '3.9'
           
-      - name: Install Chrome & Dependencies
+      - name: Install Dependencies
         run: |
           pip install selenium webdriver-manager requests
           
@@ -29,6 +29,7 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum-Sentinel-Bot"
-          git add sentinel_data.txt
-          git commit -m "🚀 Markt-Update: $(date)" || exit 0
+          # Fügt sowohl die Übersicht als auch die Historie hinzu
+          git add sentinel_data.txt sentinel_history.csv || echo "Keine CSV gefunden"
+          git commit -m "🚀 Aureum Sentinel Update: $(date)" || exit 0
           git push
