@@ -3,58 +3,87 @@ import numpy as np
 import requests
 import time
 import os
+import random
 import yaml
+import concurrent.futures
 from datetime import datetime
-
-# --- AUREUM SENTINEL V116 (ABGEGLICHENER STAND) ---
 
 class AureumSentinel:
     def __init__(self, config_path="aureum_sentinel.yml"):
         self.config_path = config_path
         self.load_config()
         self.anchors = {}
-        self.csv_path = self.config['storage']['csv_output']
-        self.runtime_limit = 900  # 15 Minuten Laufzeit pro Action-Run
+        self.csv_path = "sentinel_history.csv"
+        self.runtime_limit = 900 # 15 Min Laufzeit
+        self.session = requests.Session()
+        # Eiserner Standard Header gegen Bot-Erkennung
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json',
+            'Cache-Control': 'no-cache'
+        })
         
     def load_config(self):
         if os.path.exists(self.config_path):
             with open(self.config_path, "r") as f:
                 self.config = yaml.safe_load(f)
         else:
-            # Eiserner Standard Fallback
-            self.config = {
-                'storage': {'csv_output': 'sentinel_history.csv'},
-                'market_logic': {'anchor_threshold': 0.001},
-                'system_core': {'heartbeat_interval_s': 60}
-            }
+            self.config = {'market_logic': {'anchor_threshold': 0.001}}
 
-    def get_hard_refresh_price(self, isin):
-        """ Hard-Refresh Strategie: Direkte Tradegate-Simulation """
-        # Hier wird die echte Tradegate Logik implementiert
-        import random
-        return round(random.uniform(90, 110), 4)
+    def fetch_ls_price(self, asset_id):
+        """ Hard Refresh mit Anti-Bot-Jitter """
+        # Kleiner Jitter vor dem Request, um Muster zu brechen
+        time.sleep(random.uniform(0.05, 0.2))
+        
+        url = f"https://ls-api.traderepublic.com/v1/quotes/{asset_id}"
+        try:
+            response = self.session.get(url, timeout=4)
+            if response.status_code == 200:
+                data = response.json()
+                # Nutzung von 'last' oder 'bid/ask' mid gemäß Eisernem Standard
+                price = float(data.get('last', {}).get('price'))
+                return asset_id, price
+        except:
+            pass
+        return asset_id, None
 
     def run_monitoring(self):
         start_time = time.time()
-        print(f"[{datetime.now()}] 🛡️ Aureum Sentinel V116 gestartet (15 Min Loop)")
-        
-        # Assets gemäß deinem Breitband-Fokus
-        universe = ["DE000A1KWPQ3", "LU0378438732", "DE0007164600", "DE0007236101"]
+        # Dynamisches Universum: Erweitert sich automatisch
+        # Startset: Deine Kernwerte + Top-Volumen Assets (DAX/NASDAQ/Crypto)
+        universe = [
+            "DE0007164600", "DE000ENER610", "LU0378438732", "DE000A1KWPQ3", 
+            "US0378331005", "US5949181045", "US67066G1040", "BTC-EUR", "ETH-EUR"
+        ]
+
+        print(f"[{datetime.now()}] 🛡️ Sentinel V116: Breitband-Überwachung aktiv.", flush=True)
 
         while time.time() - start_time < self.runtime_limit:
             cycle_data = []
-            for isin in universe:
-                price = self.get_hard_refresh_price(isin)
-                
-                # 0.1% Anker-Logik (Eiserner Standard)
-                if isin not in self.anchors or abs(price - self.anchors[isin]) / self.anchors[isin] > 0.001:
-                    self.anchors[isin] = price
-                    cycle_data.append({
-                        'Timestamp': datetime.now().isoformat(),
-                        'ISIN': isin,
-                        'Price': price,
-                        'Anchor_Event': "TRUE"
-                    })
+            
+            # Parallelisierung mit moderater Worker-Anzahl gegen Bot-Falle
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                results = list(executor.map(self.fetch_ls_price, universe))
+
+            for asset_id, current_price in results:
+                if current_price:
+                    # Strategie: 0,1% Anker ohne Filter (Eiserner Standard 18.02.)
+                    if asset_id not in self.anchors:
+                        self.anchors[asset_id] = current_price
+                        trigger = True
+                    else:
+                        diff = abs(current_price - self.anchors[asset_id]) / self.anchors[asset_id]
+                        trigger = diff >= self.config['market_logic']['anchor_threshold']
+                    
+                    if trigger:
+                        self.anchors[asset_id] = current_price
+                        cycle_data.append({
+                            'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            'ISIN': asset_id,
+                            'Price': round(current_price, 4),
+                            'Source': 'L&S_TR_LIVE',
+                            'Anchor_Event': "TRUE"
+                        })
             
             if cycle_data:
                 df = pd.DataFrame(cycle_data)
@@ -63,10 +92,10 @@ class AureumSentinel:
                     df.to_csv(f, header=not file_exists, index=False)
                     f.flush()
                     os.fsync(f.fileno())
-                print(f"[{datetime.now()}] Anker gesetzt für {len(cycle_data)} Assets.")
+                print(f"[{datetime.now()}] {len(cycle_data)} Ankerpunkte synchronisiert.", flush=True)
             
-            # Heartbeat aus der YML
-            time.sleep(self.config['system_core']['heartbeat_interval_s'])
+            # Pause zwischen den Zyklen zur Stabilisierung
+            time.sleep(30)
 
 if __name__ == "__main__":
     sentinel = AureumSentinel()
