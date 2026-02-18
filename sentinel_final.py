@@ -6,67 +6,72 @@ import time
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 
-# Konfiguration
 CSV_FILE = "sentinel_market_data.csv"
-ASSETS = {
+HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+
+# Definition der Hub-URLs für Massen-Scraping
+INDEX_URLS = {
+    "DAX_All": "https://www.ls-tc.de/de/index/dax",
+    "NASDAQ_All": "https://www.ls-tc.de/de/index/nasdaq-100",
+    "Crypto": "https://www.ls-tc.de/de/kryptowaehrungen"
+}
+
+# Einzel-Assets für direkten Fokus
+CORE_ASSETS = {
+    "Bitcoin": "DE000A28M8D0", # BTC ETC als Proxy oder Direktlink
     "Siemens_Energy": "DE000ENER6Y0",
-    "Gold_A1KWPQ": "DE000A1KWPQ1",
-    "SAP_SE": "DE0007164600",
-    "NASDAQ_100": "US6311011026"
+    "SAP_SE": "DE0007164600"
 }
 
-# Header um Blocking zu vermeiden
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-}
-
-def fetch_asset(name, isin):
-    url = f"https://www.ls-tc.de/de/aktie/{isin}"
+def fetch_table_data(url):
+    """Extrahiert alle Kurse aus einer Tabellenübersicht (Index-Seite)."""
+    assets = []
     try:
-        # Session nutzen für bessere Performance bei vielen Workern
-        with requests.Session() as s:
-            response = s.get(url, headers=HEADERS, timeout=5)
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.text, 'html.parser')
-                # Die L&S mono Klassen für Geld/Brief
-                spans = soup.find_all("div", {"class": "mono"})
-                if len(spans) >= 3:
-                    ask = spans[2].text.strip().replace('.', '').replace(',', '.')
-                    return [name, ask]
+        res = requests.get(url, headers=HEADERS, timeout=10)
+        soup = BeautifulSoup(res.text, 'html.parser')
+        # L&S Tabellenstruktur: Suche nach Zeilen in der Kursliste
+        rows = soup.find_all("tr")
+        for row in rows:
+            cols = row.find_all("td")
+            if len(cols) >= 3:
+                name = cols[0].text.strip().replace("\n", "")
+                # Der Briefkurs steht bei Indexlisten oft in einer spezifischen Spalte
+                price = cols[2].text.strip().replace('.', '').replace(',', '.')
+                if price and any(char.isdigit() for char in price):
+                    assets.append([name, price])
     except Exception as e:
-        return [name, None]
-    return [name, None]
+        print(f"Error fetching {url}: {e}")
+    return assets
 
-def run_sentinel():
-    # 1. Einmaliges Löschen beim Start
-    if os.path.exists(CSV_FILE):
-        os.remove(CSV_FILE)
+def run_sentinel_max():
+    if os.path.exists(CSV_FILE): os.remove(CSV_FILE)
     
-    # 2. Header schreiben
     with open(CSV_FILE, mode='w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(["Timestamp", "Asset", "Ask"])
+        writer.writerow(["Timestamp", "Asset", "Price"])
 
-    print(f"[*] Aureum Sentinel GitHub-Worker gestartet...")
+    print(f"[*] Aureum Sentinel Max gestartet. Scanne DAX, NASDAQ & BTC...")
 
-    # 3. Endlosschleife für Daten-Logging
     while True:
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        
-        # Parallelisierung mit 8 Workern
-        with ThreadPoolExecutor(max_workers=8) as executor:
-            results = list(executor.map(lambda p: fetch_asset(*p), ASSETS.items()))
-        
+        all_results = []
+
+        # 1. Scrape Index-Listen (Massenabfrage)
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            lists = list(executor.map(fetch_table_data, INDEX_URLS.values()))
+            for l in lists: all_results.extend(l)
+
+        # 2. Schreibe in CSV
         with open(CSV_FILE, mode='a', newline='') as f:
             writer = csv.writer(f)
-            for name, ask in results:
-                if ask:
-                    writer.writerow([ts, name, ask])
-                    # Sofortiger Output für das GitHub-Log
-                    print(f"[{ts}] {name}: {ask} €")
-        
-        # Kurze Pause für die Stabilität
-        time.sleep(0.5)
+            for name, price in all_results:
+                writer.writerow([ts, name, price])
+                # Filter für die Konsole, damit das Log nicht explodiert
+                if "Siemens" in name or "Bitcoin" in name or "SAP" in name:
+                    print(f"[{ts}] {name}: {price} €")
+
+        # Da wir jetzt ca. 150 Werte pro Durchgang holen, erhöhen wir das Intervall leicht
+        time.sleep(1)
 
 if __name__ == "__main__":
-    run_sentinel()
+    run_sentinel_max()
