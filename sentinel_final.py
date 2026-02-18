@@ -1,56 +1,72 @@
-import pyautogui
-import pytesseract
+import requests
+from bs4 import BeautifulSoup
 import csv
-import time
 import os
+import time
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
 
-# PFAD ZU TESSERACT (Muss gesetzt sein, z.B. C:\Program Files\Tesseract-OCR\tesseract.exe)
-# pytesseract.pytesseract.tesseract_cmd = r'PATH_TO_YOUR_TESSERACT'
-
+# Konfiguration
 CSV_FILE = "sentinel_market_data.csv"
-
-# Definiere hier die Pixel-Bereiche (x, y, breite, höhe) für deine 8-10 Worker-Fenster
-# Du musst diese Werte einmal an dein Monitor-Setup anpassen!
-WORKER_ZONES = {
-    "Siemens_Energy_Ask": (100, 200, 120, 40),
-    "Gold_A1KWPQ_Ask":    (300, 200, 120, 40),
-    "Nasdaq_Ask":         (500, 200, 120, 40),
-    "SAP_Ask":            (700, 200, 120, 40)
+ASSETS = {
+    "Siemens_Energy": "DE000ENER6Y0",
+    "Gold_A1KWPQ": "DE000A1KWPQ1",
+    "SAP_SE": "DE0007164600",
+    "NASDAQ_100": "US6311011026"
 }
 
-def initialize_csv():
+# Header um Blocking zu vermeiden
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+}
+
+def fetch_asset(name, isin):
+    url = f"https://www.ls-tc.de/de/aktie/{isin}"
+    try:
+        # Session nutzen für bessere Performance bei vielen Workern
+        with requests.Session() as s:
+            response = s.get(url, headers=HEADERS, timeout=5)
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                # Die L&S mono Klassen für Geld/Brief
+                spans = soup.find_all("div", {"class": "mono"})
+                if len(spans) >= 3:
+                    ask = spans[2].text.strip().replace('.', '').replace(',', '.')
+                    return [name, ask]
+    except Exception as e:
+        return [name, None]
+    return [name, None]
+
+def run_sentinel():
+    # 1. Einmaliges Löschen beim Start
     if os.path.exists(CSV_FILE):
         os.remove(CSV_FILE)
-    with open(CSV_FILE, mode='w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(["Timestamp", "Asset", "Price_Ask", "Source"])
-    print(f"[*] {CSV_FILE} gelöscht und neu gestartet.")
-
-def run_ocr_sentinel():
-    initialize_csv()
-    print("[!] OCR-Logger aktiv. Lese Bildschirminhalte...")
     
+    # 2. Header schreiben
+    with open(CSV_FILE, mode='w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(["Timestamp", "Asset", "Ask"])
+
+    print(f"[*] Aureum Sentinel GitHub-Worker gestartet...")
+
+    # 3. Endlosschleife für Daten-Logging
     while True:
-        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
         
-        with open(CSV_FILE, mode='a', newline='') as file:
-            writer = csv.writer(file)
-            for name, zone in WORKER_ZONES.items():
-                # Screenshot der Zone
-                img = pyautogui.screenshot(region=zone)
-                # OCR Texterkennung (Nur Zahlen und Kommata)
-                raw_text = pytesseract.image_to_string(img, config='--psm 7 -c tessedit_char_whitelist=0123456789,.')
-                price = raw_text.strip().replace(',', '.')
-                
-                if price:
-                    writer.writerow([timestamp, name, price, "OCR_Live"])
-                    print(f"[{timestamp}] {name}: {price} €") # Sofort-Feedback
-                else:
-                    print(f"[{timestamp}] {name}: KEIN WERT GEFUNDEN (Prüfe Zone!)")
+        # Parallelisierung mit 8 Workern
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            results = list(executor.map(lambda p: fetch_asset(*p), ASSETS.items()))
         
-        # High-Speed Intervall
-        time.sleep(0.1) 
+        with open(CSV_FILE, mode='a', newline='') as f:
+            writer = csv.writer(f)
+            for name, ask in results:
+                if ask:
+                    writer.writerow([ts, name, ask])
+                    # Sofortiger Output für das GitHub-Log
+                    print(f"[{ts}] {name}: {ask} €")
+        
+        # Kurze Pause für die Stabilität
+        time.sleep(0.5)
 
 if __name__ == "__main__":
-    run_ocr_sentinel()
+    run_sentinel()
