@@ -10,7 +10,6 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
 # --- KONFIGURATION (TELEGRAM WEBHOOK) ---
-# Trage hier deine Daten ein
 TELEGRAM_TOKEN = "DEIN_API_TOKEN"
 CHAT_ID = "DEINE_CHAT_ID"
 
@@ -19,16 +18,6 @@ TARGET_WKNS = [
     "ENER61", "SAP000", "BASF11", "DTE000", "VOW300", 
     "ADS000", "DBK100", "ALV001", "BAY001", "BMW111"
 ]
-
-def send_telegram(message):
-    if TELEGRAM_TOKEN == "DEIN_API_TOKEN":
-        return
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": message, "parse_mode": "Markdown"}
-    try:
-        requests.post(url, json=payload, timeout=10)
-    except:
-        pass
 
 def setup_driver():
     options = Options()
@@ -39,56 +28,70 @@ def setup_driver():
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
+        driver.set_page_load_timeout(25)
         return driver
     except:
         return None
 
 def scan_asset(wkn):
-    # Präzisions-Delay 1ms für Schwarm-Sync (wie in Colab)
+    # --- 1ms PRÄZISIONS-TAKT (Schwarm-Sync) ---
     time.sleep(0.001)
+    
     driver = setup_driver()
     if not driver:
-        return f"❌ {wkn}: Browser-Fehler"
+        return f"❌ {wkn}: RAM-Limit/Fehler"
+    
     try:
         driver.get(f"https://www.ls-tc.de/de/aktie/{wkn}")
-        time.sleep(4)
-        html = driver.page_source
+        # Kurze Lese-Simulation (Optimiert auf 8 Worker)
+        time.sleep(3) 
         
-        # Bid/Ask Suche
+        html = driver.page_source
         bid = re.search(r'id="push-bid".*?>([\d,.]+)<', html)
         ask = re.search(r'id="push-ask".*?>([\d,.]+)<', html)
         
-        # Chart-Historie (Buttons 1T, 1W, 1M durchschalten)
+        # Zeitreihen-Erfassung (Historie-Buttons 1T, 1W, 1M)
         h_status = []
         for period in ["1T", "1W", "1M"]:
             try:
                 btn = driver.find_element("xpath", f"//button[contains(., '{period}')]")
                 driver.execute_script("arguments[0].click();", btn)
-                time.sleep(1.5)
+                time.sleep(1.0) # Stabiler Render-Takt
                 h_status.append(f"{period}:OK")
             except:
                 h_status.append(f"{period}:-")
 
         if bid and ask:
             return f"✅ *{wkn}* | B: {bid.group(1)} | A: {ask.group(1)} | Hist: {'/'.join(h_status)}"
-        return f"📡 *{wkn}* | Warte auf Marktöffnung | Hist: {'/'.join(h_status)}"
-    except:
-        return f"❌ *{wkn}* | Timeout"
+        return f"📡 *{wkn}* | Marktdaten-Standby | Hist: {'/'.join(h_status)}"
+            
+    except Exception as e:
+        return f"⚠️ *{wkn}* | Timeout ({str(e)[:15]})"
     finally:
         driver.quit()
 
 if __name__ == "__main__":
-    print("🛡️ AUREUM SENTINEL V56 INITIALISIERT")
+    print(f"🛡️ AUREUM SENTINEL V61 - 8-WORKER STABILITY MODE")
     sys.stdout.flush()
+    
     start_time = time.time()
     
-    # 24 Worker Parallel-Modus
-    with ThreadPoolExecutor(max_workers=24) as executor:
+    # --- PARALLEL-MODUS: REDUZIERT AUF 8 WORKER ---
+    with ThreadPoolExecutor(max_workers=8) as executor:
         results = list(executor.map(scan_asset, TARGET_WKNS))
     
-    summary = f"🛰️ *Sentinel Scan Report*\n⏱️ Dauer: {round(time.time()-start_time,1)}s\n---\n"
+    # Zusammenfassung & Telegram
+    duration = round(time.time() - start_time, 1)
+    summary = f"🛰️ *Sentinel Scan Report (8-Worker)*\n⏱️ Dauer: {duration}s\n---\n"
     summary += "\n".join(results)
     
     print(summary)
-    send_telegram(summary)
+    
+    if TELEGRAM_TOKEN != "DEIN_API_TOKEN":
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        try:
+            requests.post(url, json={"chat_id": CHAT_ID, "text": summary, "parse_mode": "Markdown"}, timeout=10)
+        except:
+            pass
+            
     sys.stdout.flush()
