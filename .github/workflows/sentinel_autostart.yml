@@ -1,15 +1,13 @@
-name: Aureum Sentinel V42 Data Interface
+name: Aureum Sentinel V42 Broad-Scan
 
 on:
   schedule:
-    - cron: '*/30 * * * *' # Läuft alle 30 Minuten automatisch
-  workflow_dispatch:      # Ermöglicht dir den manuellen Start per Button
+    - cron: '*/20 * * * *' # Startet alle 20 Minuten
+  workflow_dispatch:      # Manueller Start möglich
 
 jobs:
   run-sentinel:
     runs-on: ubuntu-latest
-    
-    # WICHTIG: Erlaubt dem Bot das Schreiben/Pushen in dein Repository
     permissions:
       contents: write
 
@@ -23,26 +21,22 @@ jobs:
           python-version: '3.10'
 
       - name: Install Dependencies
-        run: |
-          pip install requests beautifulsoup4
+        run: pip install requests beautifulsoup4
 
-      - name: Run Sentinel Scraper
+      - name: Run Sentinel Broad-Scan
         run: |
-          # Das Python-Skript beendet sich nach 20 Min selbst (RUNTIME_LIMIT_SECONDS)
-          # Wir nutzen trotzdem ein Sicherheits-Timeout von GitHub
-          timeout 1300s python sentinel_final.py || echo "Zeitfenster erreicht, starte Datensicherung."
+          # Führt das Skript aus (15 Min Sammelzeit)
+          python sentinel_final.py
 
-      - name: Commit and Push CSV Interface
+      - name: Clean and Commit Data
         run: |
           git config --local user.email "sentinel-bot@github.com"
           git config --local user.name "Aureum-Sentinel-Bot"
           
-          # Sicherstellen, dass die Datei existiert, bevor wir adden
+          # Sicherstellen, dass die CSV existiert
           if [ -f sentinel_market_data.csv ]; then
             git add sentinel_market_data.csv
-            # [skip ci] verhindert, dass der Push einen neuen Run auslöst
-            git commit -m "Update Rolling 48h Market Data [skip ci]" || echo "Keine neuen Daten zum Committen"
+            # Committet die neuen Daten inkl. Spreads und News
+            git commit -m "Sentinel V42: 15min Broad-Scan & 48h-Cleanup [skip ci]" || echo "Keine Änderungen"
             git push
-          else
-            echo "CSV Datei wurde nicht gefunden. Abbruch."
           fi
