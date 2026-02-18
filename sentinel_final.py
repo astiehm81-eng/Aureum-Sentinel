@@ -17,76 +17,69 @@ class AureumSentinel:
             'Cache-Control': 'no-cache'
         })
         
-    def scrape_active_isins(self):
-        """ 
-        Scraping-Strategie: Findet ISINs auf L&S/TR Übersichtsseiten.
-        Sucht nach Mustern für asiatische und US-Aktien.
-        """
-        discovered = []
-        # Wir scrapen die Hauptübersichten für 'Aktien' und 'Neuheiten'
+    def get_tradegate_isins(self):
+        """ Holt ISINs von Tradegate als Basis für die Suche """
         urls = [
-            "https://www.ls-tc.de/de/aktien",
-            "https://www.ls-tc.de/de/kryptowaehrungen"
+            "https://www.tradegate.de/index.php",
+            "https://www.tradegate.de/kurslisten.php?die=aktien"
         ]
+        isins = set()
         for url in urls:
             try:
-                res = self.session.get(url, timeout=5)
-                # Extraktion von ISIN-Mustern via Regex (Eiserner Standard Weg)
-                isins = re.findall(r'[A-Z]{2}[A-Z0-9]{9}[0-9]', res.text)
-                discovered.extend(isins)
-            except:
-                pass
-        return list(set(discovered)) # Duplikate entfernen
+                res = self.session.get(url, timeout=10)
+                found = re.findall(r'[A-Z]{2}[A-Z0-9]{9}[0-9]', res.text)
+                isins.update(found)
+            except: continue
+        return list(isins)
 
-    def fetch_ls_hard_refresh(self, isin):
-        """ Einlesen wie im stabilen Stand: Direkt & Ungefiltert """
+    def fetch_ls_price(self, isin):
+        """ Einlesen wie im stabilen Stand: Hard Refresh L&S """
         url = f"https://ls-api.traderepublic.com/v1/quotes/{isin}"
         try:
-            time.sleep(random.uniform(0.1, 0.3)) # Anti-Bot Jitter
+            # Nur ein ganz kurzer Jitter für die IP-Stabilität
+            time.sleep(0.05) 
             response = self.session.get(url, timeout=3)
             if response.status_code == 200:
-                data = response.json()
-                # Einlesen des Last-Preises ohne Rauschfilter
-                return float(data.get('last', {}).get('price'))
-        except:
-            return None
+                price = response.json().get('last', {}).get('price')
+                return float(price) if price else None
+        except: return None
 
     def run_monitoring(self):
         start_time = time.time()
+        # Einmaliges Discovery am Anfang
+        universe = self.get_tradegate_isins()
         
-        # 1. Scraping-Lauf zur Initialisierung (Breitband-Discovery)
-        print(f"[{datetime.now()}] Starte L&S Scraping-Discovery...", flush=True)
-        universe = self.scrape_active_isins()
-        
-        # Fallback auf Kern-Assets (Asien/USA/Crypto)
-        universe += ["BTC-EUR", "ETH-EUR", "US0378331005", "JP3435000009"]
-        universe = list(set(universe))
-
-        # Heartbeat-Startzeile
+        # System-Start-Eintrag
         pd.DataFrame([{
             'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            'ISIN': 'SYSTEM_INIT',
+            'ISIN': 'SENTINEL_START',
             'Price': len(universe),
-            'Source': 'SCRAPE_DISCOVERY_V116',
-            'Anchor_Event': 'START'
+            'Source': 'L&S_MINUTE_CYCLE',
+            'Anchor_Event': 'INIT'
         }]).to_csv(self.csv_path, mode='a', header=not os.path.exists(self.csv_path), index=False)
 
         while time.time() - start_time < self.runtime_limit:
+            cycle_start = time.time()
+            
             for isin in universe:
-                price = self.fetch_ls_hard_refresh(isin)
+                price = self.fetch_ls_price(isin)
                 if price:
-                    # 0,1% ANKER-STRATEGIE (Kein Buffer, direkter Vergleich)
+                    # 0,1% Anker-Logik (Eiserner Standard)
                     if isin not in self.anchors or abs(price - self.anchors[isin]) / self.anchors[isin] > 0.001:
                         self.anchors[isin] = price
                         pd.DataFrame([{
                             'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             'ISIN': isin,
                             'Price': round(price, 4),
-                            'Source': 'L&S_HARD_REFRESH',
+                            'Source': 'L&S_LIVE',
                             'Anchor_Event': 'TRUE'
                         }]).to_csv(self.csv_path, mode='a', header=False, index=False)
             
-            time.sleep(60)
+            # Warten bis zum nächsten vollen Minuten-Takt
+            elapsed = time.time() - cycle_start
+            wait_time = max(1, 60 - elapsed)
+            print(f"[{datetime.now()}] Zyklus beendet. Warte {int(wait_time)}s bis zum nächsten Scan.")
+            time.sleep(wait_time)
 
 if __name__ == "__main__":
     AureumSentinel().run_monitoring()
