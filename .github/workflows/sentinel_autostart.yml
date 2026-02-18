@@ -1,42 +1,60 @@
 # ======================================================
-# AUREUM SENTINEL - EISERNER STANDARD V116 (FINAL)
+# AUREUM SENTINEL - CONFIGURATION V1.16.0 (FINAL)
 # ======================================================
+# Status: Eisernen Standard (V42) | Target: Aureum Protocol
 
 system_core:
   version: "1.16.0"
   process_name: "Aureum Sentinel"
-  standard: "V42_Eisener_Standard"
-  heartbeat_s: 60                 # 1-Minuten-Intervall für Breitband
-  delete_buffer_on_start: true    # Erzwungener Hard-Refresh
-  self_learning_mode: true        # Korrigiert Bias in Echtzeit
+  heartbeat_interval_s: 60        # 1-Minuten-Takt für Breitband-Markt
+  delete_buffer_on_start: true    # Löscht alte Cache-Werte (18.02.)
+  enforce_hard_refresh: true      # Direkter Tradegate-Zugriff erzwungen
+  self_learning_bias_corr: true   # Automatische Fehlerkorrektur
 
 market_logic:
   strategy: "Hard-Refresh-Tradegate"
-  noise_filter: false             # DEAKTIVIERT laut Anweisung
-  anchor_threshold: 0.001         # 0.1% Regel für neue Fixpunkte
-  target_state: "Aureum Protocol"
-  optimizer: "Swarm-Optimizer"
+  noise_filter_active: false      # DEAKTIVIERT laut Anweisung 18.02.
+  anchor_point_trigger: 0.001     # 0.1% Regel für neue Fixpunkte
+  swarm_optimizer: true           # Default für alle Signale
+  impact_variance: "dynamic"      # Dynamische Gewichtung der Faktoren
 
 analysis_layers:
-  - layer_1: "Fourier-Wavelet-Denoising"
-  - layer_2: "Kriging-Spatial-Mapping"
-  - layer_3: "Monte-Carlo-Paths-1M"
-  - layer_4: "Gamma-Exposure-Proxy"
-  - layer_5: "Relative-Strength-Matrix"
-  - layer_6_context:
-      enabled: true
-      modules: ["NLP-Sentiment", "DXY-Matrix", "Supply-Chain-Cascade"]
-      impact_variance: "dynamic"
-      time_decay: 0.85
+  layer_1_fourier: "Wavelet-Denoising"
+  layer_2_kriging: "Spatial-DNN-Mapping"
+  layer_3_mc: "1.000.000-Monte-Carlo-Paths"
+  layer_4_gamma: "GEX-Volatility-Proxy"
+  layer_5_mrs: "Mansfield-Relative-Strength"
+  layer_6_context:                # Context-Layer (18.02.)
+    enabled: true
+    modules: 
+      - "Sentiment-NLP"           # Media-Time-Decay integriert
+      - "DXY-Currency-Matrix"     # US-Dollar/Euro Kopplung
+      - "Supply-Chain-Cascade"    # Sektor-Abhängigkeiten
+      - "Dark-Pool-Convergence"   # Institutionelle Daten
+    time_decay_filter: 0.85       # Filter für Medieneinflüsse
 
 discovery_engine:
-  mode: "Full-Market-Scan"
-  sources: ["Tradegate", "LS-Exchange"]
-  parallel_workers: 15
+  mode: "Full-Market-Scan"       # Scannt alle L&S / Tradegate Assets
+  parallel_workers: 15            # Maximale Rechenpower-Nutzung
   bot_protection:
     header_rotation: true
-    jitter: [0.1, 0.4]
+    jitter_range: [0.1, 0.4]
+
+push_notifications:
+  enabled: true
+  priority_assets:                # Haupt-Fokus für Sofort-Push
+    - "DE000A1KWPQ3"              # Gold (A1KWPQ)
+    - "LU0378438732"              # Nasdaq-100 (LYX00F)
+  triggers:
+    on_anchor_point: true         # Push bei jeder 0.1% Bewegung
+    on_sync_crash_level: 85.0     # Alarm bei Markt-Synchronität > 85%
+    on_spread_warning: 0.05       # Warnung bei OnVista/LS-Differenz
+    on_confirmation_latency: true # Integration Latenz-Check
 
 storage:
   csv_output: "aureum_sentinel_v116_data.csv"
-  historical_provider: "Yahoo"    # Für Daten > 1 Woche
+  write_strategy: "atomic_flush"  # Verhindert Einfrieren der Datei
+  force_csv_refresh: true         # Schließt Datei nach jedem Schreibvorgang
+  historical_data_source:
+    recent: "Tradegate"           # < 1 Woche
+    deep: "Yahoo"                 # > 1 Woche
