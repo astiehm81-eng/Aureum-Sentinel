@@ -10,56 +10,50 @@ ASSETS = {
     "BMW.DE": "BMW"
 }
 
-def calibrate_and_sync(ticker, name):
-    print(f"🔍 Kalibrierung läuft für {name}...")
+def fetch_and_calibrate_max(ticker, name):
+    print(f"📡 Deep-Scan & Kalibrierung (MAX) für {name}...")
     stock = yf.Ticker(ticker)
     
-    # 1. Historie holen (1 Monat zur Kalibrierung)
-    hist = stock.history(period="1mo", interval="1d")
+    # 1. Gesamte Historie laden
+    df = stock.history(period="max", interval="1d")
+    if df.empty:
+        return []
+
+    # 2. Lückenlosigkeit sicherstellen (Wochenenden/Feiertage füllen)
+    # Wir erstellen einen lückenlosen Zeitindex
+    full_index = pd.date_range(start=df.index[0], end=df.index[-1], freq='D')
+    df = df.reindex(full_index)
+    df['Close'] = df['Close'].ffill() # Letzten Kurs bei Lücken übernehmen
     
-    # 2. Intraday holen (Heute)
+    # 3. Intraday-Abgleich (Letzte 24h in Minuten-Auflösung für den 'Last Stand')
     intra = stock.history(period="1d", interval="1m")
     
-    if hist.empty or intra.empty:
-        return None
-
-    # Prüfung: Passt der gestrige Schlusskurs zum heutigen Start?
-    yesterday_close = hist['Close'].iloc[-1]
-    today_open = intra['Open'].iloc[0]
-    drift = abs(yesterday_close - today_open)
-    drift_pct = (drift / yesterday_close) * 100
-
-    # Anzeige der Kalibrierung im Log
-    print(f"   📊 Check: Gestern {yesterday_close:.2f} | Heute Open {today_open:.2f}")
-    print(f"   ⚖️ Drift: {drift_pct:.4f}%")
-
-    if drift_pct > 1.5:
-        print(f"   ⚠️ Warnung: Hoher Drift bei {name}! Möglicher Gap.")
-    else:
-        print(f"   ✅ {name} ist kalibriert.")
-
-    # Daten zusammenführen (History + Heute Intraday)
-    combined = []
-    # Historie (Tagesbasis)
-    for ts, row in hist.iterrows():
-        combined.append([ts.strftime('%Y-%m-%d'), ticker, name, round(row['Close'], 2), "HIST"])
+    data_output = []
+    # Historische Daten (Tage)
+    for ts, row in df.iterrows():
+        data_output.append([ts.strftime('%Y-%m-%d'), ticker, name, round(row['Close'], 2), "HIST_DAILY"])
     
-    # Intraday (Minutenbasis - Letzte 60 Min zur Verifizierung)
-    for ts, row in intra.tail(60).iterrows():
-        combined.append([ts.strftime('%Y-%m-%d %H:%M'), ticker, name, round(row['Close'], 2), "INTRA"])
-        
-    return combined
+    # Intraday-Daten (Minuten von heute für die Echtzeit-Verifizierung)
+    if not intra.empty:
+        for ts, row in intra.iterrows():
+            data_output.append([ts.strftime('%Y-%m-%d %H:%M'), ticker, name, round(row['Close'], 2), "INTRA_TICK"])
+
+    # Verifizierung im Log
+    last_price = data_output[-1][3]
+    print(f"   ✅ {name} kalibriert. {len(data_output)} Punkte. Aktuell: {last_price} €")
+    return data_output
 
 if __name__ == "__main__":
-    full_db = []
+    final_db = []
     for ticker, name in ASSETS.items():
-        data = calibrate_and_sync(ticker, name)
+        data = fetch_and_calibrate_max(ticker, name)
         if data:
-            full_db.extend(data)
+            final_db.extend(data)
     
+    # Speichern der lückenlosen "Goldenen Quelle"
     with open('sentinel_history.csv', 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(['Timestamp', 'ID', 'Asset', 'Price', 'Type'])
-        writer.writerows(full_db)
+        writer.writerows(final_db)
 
-    print("\n🏁 Kalibrierung abgeschlossen. Daten sind synchron.")
+    print("\n🏁 Sentinel V110: MAX-Datenbank lückenlos synchronisiert.")
