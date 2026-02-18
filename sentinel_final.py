@@ -5,85 +5,82 @@ from concurrent.futures import ThreadPoolExecutor
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
-# Konfiguration der Assets mit Namens-Check zur Validierung
+# Definierte Assets mit exakten Namens-Ankern für die Validierung
 ASSETS = {
     "BASF11": "BASF",
     "ENER61": "Siemens Energy",
     "SAP000": "SAP",
-    "A1EWWW": "Adidas",
-    "A0AE1X": "Nasdaq",
+    "BMW111": "BMW",
+    "ALV001": "Allianz",
     "DTE000": "Telekom",
     "VOW300": "Volkswagen",
-    "DBK100": "Deutsche Bank",
-    "ALV001": "Allianz",
-    "BAY001": "Bayer",
-    "BMW111": "BMW",
-    "IFX000": "Infineon",
-    "MUV200": "Muenchener Rueck",
-    "A0D655": "Nordex"
+    "A0AE1X": "Nasdaq"
 }
 
 CSV_FILE = 'sentinel_history.csv'
 
-def validated_worker(wkn, expected_name):
+def stealth_worker(wkn, expected_name):
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--window-size=1920,1080")
+    # Stealth User-Agent gegen Bot-Detection
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36")
     
     driver = webdriver.Chrome(options=chrome_options)
+    wait = WebDriverWait(driver, 15)
     
     try:
+        # 1. Tarnungs-Anlauf
         driver.get(f"https://www.ls-tc.de/de/aktie/{wkn}")
-        time.sleep(2) # Warten auf JS-Rendering
-
-        # 1. Validierung des Titels (Verhindert WKN-Vertauschung)
-        page_title = driver.find_element(By.TAG_NAME, "h1").text
-        if expected_name.lower() not in page_title.lower():
-            print(f"⚠️ WKN-Mismatch bei {wkn}: Seite zeigt '{page_title}'")
+        
+        # 2. Namens-Validierung (Der wichtigste Schutz gegen "Unsinn")
+        # Wir warten, bis der Titel geladen ist
+        wait.until(EC.presence_of_element_located((By.TAG_NAME, "h1")))
+        actual_title = driver.title
+        
+        if expected_name.lower() not in actual_title.lower():
+            print(f"❌ Validierungsfehler: Seite für {wkn} zeigt '{actual_title}' statt {expected_name}")
             return None
 
-        # 2. Präzise Extraktion von Geld (Bid) und Brief (Ask)
-        # Wir nutzen spezifischere Selektoren basierend auf dem L&S Layout
-        try:
-            bid = driver.find_element(By.CSS_SELECTOR, "div.price-box .bid span").text
-            ask = driver.find_element(By.CSS_SELECTOR, "div.price-box .ask span").text
-            
-            clean_bid = bid.replace('.', '').replace(',', '.')
-            clean_ask = ask.replace('.', '').replace(',', '.')
-            
-            # 3. Intraday-Punkt erfassen
-            timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-            return [timestamp, wkn, expected_name, clean_bid, clean_ask, "Intraday"]
-        except Exception as e:
-            print(f"❌ Preis-Extraktionsfehler bei {wkn}: {e}")
-            return None
+        # 3. Preis-Extraktion via XPATH (Sucht das Label 'Geld' und nimmt den Preis daneben)
+        # Dieser Pfad ist resistent gegen Design-Änderungen der CSS-Klassen
+        bid_xpath = "//div[contains(@class, 'price-box')]//div[contains(., 'Geld')]/following-sibling::div/span"
+        bid_element = wait.until(EC.visibility_of_element_located((By.XPATH, bid_xpath)))
+        
+        raw_price = bid_element.text
+        clean_price = raw_price.replace('.', '').replace(',', '.')
+        
+        print(f"✅ {expected_name}: {clean_price} € erfasst.")
+        
+        return [time.strftime('%Y-%m-%d %H:%M:%S'), wkn, expected_name, clean_price, "Intraday"]
 
     except Exception as e:
-        print(f"❌ Verbindungfehler bei {wkn}: {e}")
+        print(f"⚠️ Worker-Fehler bei {expected_name} ({wkn}): Seite evtl. geblockt.")
         return None
     finally:
         driver.quit()
 
 if __name__ == "__main__":
-    print(f"🧹 Debug-Mode: Leere {CSV_FILE}...")
-    # CSV mit Header neu erstellen (löscht alten Inhalt)
+    # Schritt 1: CSV leeren und Header schreiben
     with open(CSV_FILE, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerow(['Timestamp', 'WKN', 'Asset', 'Bid', 'Ask', 'Type'])
+        writer.writerow(['Timestamp', 'WKN', 'Asset', 'Price', 'Type'])
 
-    print("🚀 Starte validierten Multi-Worker-Lauf (V91)...")
+    print("🚀 Aureum Sentinel V91.2: Starte validierten Stealth-Run...")
     
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        results = list(executor.map(lambda x: validated_worker(x[0], x[1]), ASSETS.items()))
+    # Parallele Ausführung
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        results = list(executor.map(lambda x: stealth_worker(x[0], x[1]), ASSETS.items()))
 
-    # Ergebnisse filtern und speichern
-    valid_results = [r for r in results if r is not None]
+    # Ergebnisse filtern und sichern
+    valid_data = [r for r in results if r is not None]
     
     with open(CSV_FILE, 'a', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerows(valid_results)
+        writer.writerows(valid_data)
     
-    print(f"🏁 Validierung abgeschlossen. {len(valid_results)} saubere Datensätze gespeichert.")
+    print(f"🏁 Fertig. {len(valid_data)} Assets sauber in {CSV_FILE} übertragen.")
