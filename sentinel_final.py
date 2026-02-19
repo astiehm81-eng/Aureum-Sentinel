@@ -14,83 +14,56 @@ class AureumSentinel:
         self.runtime_limit = 120 
         self.start_time = time.time()
         self.task_queue = Queue()
-        self.session = requests.Session()
-        # Eiserner Standard Header
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/121.0.0.0',
-            'Accept': 'text/html,application/xhtml+xml',
-            'Referer': 'https://www.ls-x.de/'
-        })
-
-    def get_massive_universe(self):
-        """ Discovery über alle Tradegate-Sektoren für maximale Last """
-        isins = set()
-        targets = [
-            "https://www.tradegate.de/index.php",
-            "https://www.tradegate.de/ausfuehrungen.php?index=DAX",
-            "https://www.tradegate.de/ausfuehrungen.php?index=US_TEC",
-            "https://www.tradegate.de/ausfuehrungen.php?index=MDAX",
-            "https://www.tradegate.de/ausfuehrungen.php?index=SDAX"
+        # Eiserner Standard Identitäten
+        self.agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/121.0.0.0',
+            'Mozilla/5.0 (X11; Linux x86_64) Firefox/122.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/537.36'
         ]
-        for url in targets:
+
+    def get_expanded_universe(self):
+        """ Discovery über Tradegate-Sektoren """
+        isins = set()
+        urls = ["https://www.tradegate.de/index.php", "https://www.tradegate.de/ausfuehrungen.php?index=DAX"]
+        for url in urls:
             try:
-                res = self.session.get(url, timeout=5)
+                res = requests.get(url, timeout=5)
                 isins.update(re.findall(r'[A-Z]{2}[A-Z0-9]{9}[0-9]', res.text))
-            except: continue
+            except: pass
         return list(isins)
 
     def worker_process(self, worker_id):
-        """ 10 Worker im 1-10ms Jitter Test-Modus """
+        session = requests.Session()
+        # Jede ISIN bekommt 50-100ms Jitter
         while not self.task_queue.empty():
-            if time.time() - self.start_time > self.runtime_limit:
-                break
-                
+            if time.time() - self.start_time > self.runtime_limit: break
             isin = self.task_queue.get()
-            
-            # EXTREM-JITTER TEST: 1ms bis 10ms
-            # Das entspricht quasi einem synchronen Angriff der Worker
-            time.sleep(random.uniform(0.001, 0.010))
+            time.sleep(random.uniform(0.05, 0.10)) # Konservativer Jitter
             
             try:
-                url = f"https://www.ls-x.de/de/aktie/{isin}"
-                res = self.session.get(url, timeout=5)
-                
-                if res.status_code == 200:
-                    # Suche nach Preis im HTML
-                    match = re.search(r'price-value">([\d,.]+)', res.text)
-                    if match:
-                        price = float(match.group(1).replace('.', '').replace(',', '.'))
-                        self._save_atomic(isin, price, worker_id)
-                    else:
-                        # Logge leere Treffer als potenziellen Bot-Block
-                        print(f"Worker_{worker_id}: ISIN {isin} - Preis-Tag fehlt (Block-Gefahr?)")
-                elif res.status_code == 403:
-                    print(f"Worker_{worker_id}: 403 Forbidden! Jitter zu niedrig.")
-            except:
-                pass
-            finally:
-                self.task_queue.task_done()
+                session.headers.update({'User-Agent': random.choice(self.agents), 'Referer': 'https://www.ls-x.de/'})
+                res = session.get(f"https://www.ls-x.de/de/aktie/{isin}", timeout=7)
+                match = re.search(r'price-value">([\d,.]+)', res.text)
+                if match:
+                    price = float(match.group(1).replace('.', '').replace(',', '.'))
+                    self._save_data(isin, price, worker_id)
+                else: print(f"W{worker_id}: {isin} - Preis-Tag fehlt.")
+            except: pass
+            finally: self.task_queue.task_done()
 
-    def _save_atomic(self, isin, price, worker_id):
-        """ Sofortiges Schreiben des Ankerpunkts """
+    def _save_data(self, isin, price, worker_id):
         pd.DataFrame([{
             'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            'ISIN': isin,
-            'Price': round(price, 4),
-            'Source': f'W{worker_id}_J10ms',
-            'Anchor_Event': 'TRUE'
+            'ISIN': isin, 'Price': round(price, 4),
+            'Source': f'WORKER_{worker_id}_V130', 'Anchor_Event': 'TRUE'
         }]).to_csv(self.csv_path, mode='a', header=False, index=False)
 
-    def run_nitro_test(self):
-        universe = self.get_massive_universe()
-        for isin in universe:
-            self.task_queue.put(isin)
-            
-        print(f"Starte Nitro-Test: {len(universe)} ISINs | 10 Worker | 1-10ms Jitter")
-
+    def run(self):
+        universe = self.get_expanded_universe()
+        for isin in universe: self.task_queue.put(isin)
+        print(f"STARTE EISERNER STANDARD V130 | {len(universe)} ISINs | 50-100ms Jitter")
         with ThreadPoolExecutor(max_workers=10) as executor:
-            for i in range(10):
-                executor.submit(self.worker_process, i)
+            for i in range(10): executor.submit(self.worker_process, i)
 
 if __name__ == "__main__":
-    AureumSentinel().run_nitro_test()
+    AureumSentinel().run()
