@@ -1,4 +1,4 @@
-name: Aureum Sentinel V139 - Eiserner Standard OCR
+name: Aureum Sentinel V140 - Optical Search Engine
 
 on:
   workflow_dispatch:
@@ -7,27 +7,27 @@ jobs:
   run-sentinel:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Install System Engine
+      - name: Install System OCR
         run: |
           sudo apt-get update
           sudo apt-get install -y tesseract-ocr
 
-      - name: Install Python & Playwright
+      - name: Install Python & Browsers
         run: |
           pip install pandas requests playwright pytesseract Pillow
           playwright install chromium
           playwright install-deps chromium
 
-      - name: Run Sentinel OCR
+      - name: Execute Sentinel V140
         run: python sentinel_final.py
 
-      - name: Commit and Push
+      - name: Push Market Data
         run: |
           git config --global user.name "Aureum-Bot"
           git config --global user.email "bot@aureum.com"
           git add sentinel_history.csv
-          git commit -m "Update Market Data (V139 OCR)" || echo "No changes"
+          git commit -m "V140 Optical Pulse: $(date)" || echo "No changes"
           git push
