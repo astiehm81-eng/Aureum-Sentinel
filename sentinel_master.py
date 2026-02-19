@@ -1,72 +1,67 @@
 import pandas as pd
-import yfinance as yf
+import pandas_datareader.data as web
 import time
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor
 
-# --- KONFIGURATION (EISERNER STANDARD V46 - MASS SCALE) ---
+# --- KONFIGURATION (EISERNER STANDARD) ---
 HERITAGE_FILE = "sentinel_heritage.parquet"
-BUFFER_FILE = "sentinel_buffer.parquet"
 POOL_FILE = "isin_pool.json"
-CYCLE_MINUTES = 15
-BATCH_SIZE = 100
+MAX_WORKERS = 20  # Parallelisierung für 10k Assets
+ANCHOR_THRESHOLD = 0.001 # 0.1% Regel
 
-def get_market_tickers():
-    """Generiert eine Liste von ~10.000 Tickersymbolen aus globalen Indizes."""
-    # Beispielhaft: DAX, S&P 500, NASDAQ 100, Russell 2000 & STOXX 600
-    # In der Praxis laden wir hier die Listen der Börsenplätze
-    core_symbols = [
-        "SAP.DE", "ENR.DE", "AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "GOOGL", "META", 
-        "ASML.AS", "SIE.DE", "DTE.DE", "AIR.PA", "MC.PA"
-    ]
-    # Hier können wir dynamisch Ticker hinzufügen
-    return list(set(core_symbols)) 
-
-def run_sentinel_mass_scale():
-    tickers = get_market_tickers()
-    print(f"🌍 Discovery: Überwache {len(tickers)} Assets...")
+def get_10k_pool():
+    """Lädt oder generiert den massiven 10.000er Pool."""
+    if os.path.exists(POOL_FILE):
+        with open(POOL_FILE, 'r') as f: return json.load(f)
     
-    # 1. Heritage Check (Nur anhängen, nicht mehr löschen!)
-    if not os.path.exists(HERITAGE_FILE):
-        results = []
-        for t in tickers:
-            try:
-                df = yf.download(t, period="max", interval="1d", progress=False)
-                if not df.empty:
-                    df = df[['Close']].rename(columns={'Close': 'Price'})
-                    df['Ticker'] = t
-                    results.append(df)
-            except: continue
-        if results:
-            pd.concat(results).to_parquet(HERITAGE_FILE, compression='snappy')
+    # Platzhalter: Hier füllen wir die Liste mit den 10.000 Tickersymbolen
+    # In der Praxis wird diese Liste hier injiziert
+    pool = [{"symbol": f"ASSET_{i}.US", "isin": f"ISIN_{i}"} for i in range(10000)]
+    with open(POOL_FILE, 'w') as f:
+        json.dump(pool, f, indent=4)
+    return pool
 
-    # 2. Live-Zyklus mit Hard-Refresh von Tradegate/Yahoo
-    live_data = []
-    print(f"🚀 Live-Monitoring startet...")
-    for m in range(CYCLE_MINUTES):
-        start = time.time()
-        # Batch-Download für Speed
-        try:
-            data = yf.download(tickers, period="1d", interval="1m", progress=False, group_by='ticker').tail(1)
-            for t in tickers:
-                try:
-                    price = data[t]['Close'].iloc[0] if len(tickers) > 1 else data['Close'].iloc[0]
-                    if not pd.isna(price):
-                        live_data.append({'Timestamp': datetime.now(), 'Price': float(price), 'Ticker': t})
-                except: continue
-        except: pass
+def fetch_stooq_data(asset):
+    """Holt historische Daten von Stooq."""
+    symbol = asset['symbol']
+    try:
+        # Abfrage von Stooq via Pandas Datareader
+        df = web.DataReader(symbol, 'stooq')
+        if not df.empty:
+            df = df[['Close']].rename(columns={'Close': 'Price'})
+            df['Ticker'] = symbol
+            return df
+    except Exception:
+        return None
+
+def build_parallel_heritage(pool):
+    """Parallelisierter Heritage-Build für maximale Performance."""
+    print(f"🏛️ Starte parallelen Heritage-Build für {len(pool)} Assets...")
+    
+    results = []
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        # Startet alle Abfragen gleichzeitig
+        future_to_asset = {executor.submit(fetch_stooq_data, asset): asset for asset in pool[:500]} # Erste Tranche
         
-        wait = 60 - (time.time() - start)
-        if wait > 0 and m < 14: time.sleep(wait)
-
-    # 3. Buffer sichern
-    if live_data:
-        df_new = pd.DataFrame(live_data)
-        if os.path.exists(BUFFER_FILE):
-            df_new = pd.concat([pd.read_parquet(BUFFER_FILE), df_new]).drop_duplicates()
-        df_new.to_parquet(BUFFER_FILE, compression='snappy')
-        print(f"✅ Zyklus beendet. {len(live_data)} Datenpunkte gesichert.")
+        for future in future_to_asset:
+            res = future.result()
+            if res is not None:
+                results.append(res)
+    
+    if results:
+        new_heritage = pd.concat(results)
+        # Speichern & Mergen mit bestehenden Daten
+        if os.path.exists(HERITAGE_FILE):
+            old_heritage = pd.read_parquet(HERITAGE_FILE)
+            new_heritage = pd.concat([old_heritage, new_heritage]).drop_duplicates()
+        new_heritage.to_parquet(HERITAGE_FILE, compression='snappy')
+        print(f"✅ Heritage aktualisiert. Größe: {len(new_heritage)} Zeilen.")
 
 if __name__ == "__main__":
-    run_sentinel_mass_scale()
+    start_time = time.time()
+    pool = get_10k_pool()
+    build_parallel_heritage(pool)
+    print(f"⏱️ Zyklus beendet in {round(time.time() - start_time, 2)} Sekunden.")
