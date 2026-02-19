@@ -2,11 +2,11 @@ name: Aureum Sentinel Rapid-Cycle
 
 on:
   schedule:
-    - cron: '*/5 * * * *' # Startet alle 5 Minuten
-  workflow_dispatch: # Erlaubt dir den manuellen Start jederzeit
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
 
 permissions:
-  contents: write # Ermöglicht dem Sentinel das Speichern der Daten im Repo
+  contents: write
 
 jobs:
   sentinel_run:
@@ -27,16 +27,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas pandas-datareader yfinance pyarrow fastparquet requests
 
-      - name: Execute Aureum Sentinel V52
+      - name: Execute Aureum Sentinel V53
         run: python sentinel_master.py
-        env:
-          PYTHONPATH: ${{ github.workspace }}
 
       - name: Commit and Push Data
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
-          # Alle Dateien für das Paket (10k Assets + Buffer) hinzufügen
           git add isin_pool.json sentinel_heritage.parquet sentinel_buffer.parquet
-          # Nur pushen, wenn sich Daten tatsächlich geändert haben
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Sentinel Rapid-Update [$(date)]" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Sentinel Fix: Arrow Conversion [$(date)]" && git push)
