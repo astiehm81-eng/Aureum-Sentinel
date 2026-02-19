@@ -10,68 +10,79 @@ class AureumSentinel:
     def __init__(self):
         self.anchors = {}
         self.csv_path = "sentinel_history.csv"
-        self.runtime_limit = 60  # Test-Modus: 1 Minute
+        # Verlängerte Testzeit auf 120s für tiefere Suche
+        self.runtime_limit = 120 
         self.session = requests.Session()
-        # Eiserner Standard: Browser-Identität für Hard-Refresh
         self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'de-DE,de;q=0.9,en-US;q=0.8',
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache'
         })
-        self._purge_to_iron_standard()
+        self._clean_legacy_data()
 
-    def _purge_to_iron_standard(self):
-        """ Bereinigt die CSV radikal von Yahoo und fehlerhaften Testdaten """
+    def _clean_legacy_data(self):
+        """ Entfernt Yahoo-Backfills beim Start """
         if os.path.exists(self.csv_path):
             try:
                 df = pd.read_csv(self.csv_path)
-                # Behalte nur echte Live-Daten, entferne Yahoo und die 90€-Mock-Werte
-                df = df[(df['Source'] != 'YAHOO_BACKFILL') & (df['Price'] > 1.0)]
-                df.to_csv(self.csv_path, index=False)
+                df[df['Source'] != 'YAHOO_BACKFILL'].to_csv(self.csv_path, index=False)
             except: pass
 
-    def get_iron_universe(self):
-        """ Discovery direkt vom Tradegate Orderbook (Live-Sektoren) """
-        isins = set()
-        # Wir nehmen die aktivsten Märkte für den Test
-        urls = [
+    def get_massive_universe(self):
+        """ Discovery über Tradegate-Sektoren (DAX, Tech, US) """
+        all_isins = set()
+        # Wir nehmen mehrere Listen, um die 38er-Grenze zu sprengen
+        targets = [
             "https://www.tradegate.de/index.php",
             "https://www.tradegate.de/ausfuehrungen.php?index=DAX",
             "https://www.tradegate.de/ausfuehrungen.php?index=US_TEC"
         ]
-        for url in urls:
+        for url in targets:
             try:
-                res = self.session.get(url, timeout=5)
-                isins.update(re.findall(r'[A-Z]{2}[A-Z0-9]{9}[0-9]', res.text))
+                res = self.session.get(url, timeout=10)
+                all_isins.update(re.findall(r'[A-Z]{2}[A-Z0-9]{9}[0-9]', res.text))
             except: continue
-        return list(isins)
+        return list(all_isins)
 
-    def fetch_iron_price(self, isin):
+    def fetch_via_ls_search(self, isin):
         """ 
-        Der Kern des Eisernen Standards: Hard-Refresh von L&S.
-        Keine Simulation, kein Buffer.
+        STABILE LOGIK: Suche über L&S Webseite, nicht über API.
+        Simuliert ISIN-Eingabe und Auslesen der Zielseite.
         """
-        api_url = f"https://ls-api.traderepublic.com/v1/quotes/{isin}"
+        search_url = f"https://www.ls-x.de/de/aktie/{isin}"
         try:
-            # Menschlicher Jitter für Bot-Schutz
-            time.sleep(random.uniform(0.3, 0.7))
-            # Hard-Refresh durch Cache-Control Header in der Session bereits gesetzt
-            res = self.session.get(api_url, timeout=3)
-            if res.status_code == 200:
-                price_data = res.json().get('last', {}).get('price')
-                return float(price_data) if price_data else None
-        except: return None
+            # Menschliche Pause vor der "Suche"
+            time.sleep(random.uniform(1.5, 3.0))
+            
+            # Hard Refresh der Webseite
+            response = self.session.get(search_url, timeout=10, headers={'Referer': 'https://www.ls-x.de/'})
+            
+            if response.status_code == 200:
+                # Regex Suche nach dem Preis im HTML-Body (Eiserner Standard Extraktion)
+                # Wir suchen nach dem Muster: "price":175.45 oder ähnlichen Daten-Tags im HTML
+                price_match = re.search(r'last":([\d.]+)', response.text)
+                if not price_match:
+                    # Alternativer Matcher für HTML-Darstellung
+                    price_match = re.search(r'price-value">([\d,.]+)', response.text)
+                
+                if price_match:
+                    price_str = price_match.group(1).replace(',', '.')
+                    return float(price_str)
+        except:
+            return None
 
     def run_monitoring(self):
         start_time = time.time()
-        universe = self.get_iron_universe()
+        universe = self.get_massive_universe()
         
-        # Log: Start des Eisernen Standards V121
+        # Start-Log
         pd.DataFrame([{
             'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            'ISIN': 'EISERNER_STANDARD_V121',
+            'ISIN': 'V124_IRON_SEARCH',
             'Price': len(universe),
-            'Source': 'TR_LIVE_REFRESH',
+            'Source': 'LS_WEB_SEARCH',
             'Anchor_Event': 'START'
         }]).to_csv(self.csv_path, mode='a', header=not os.path.exists(self.csv_path), index=False)
 
@@ -80,19 +91,18 @@ class AureumSentinel:
         for isin in universe:
             if time.time() - start_time > self.runtime_limit:
                 break
-            
-            price = self.fetch_iron_price(isin)
-            if price:
-                # Regel: Bewegung > 0,1% = Neuer Ankerpunkt (Noise-Filter deaktiviert)
+                
+            price = self.fetch_via_ls_search(isin)
+            if price and price > 0.1:
                 if isin not in self.anchors or abs(price - self.anchors[isin]) / self.anchors[isin] > 0.001:
                     self.anchors[isin] = price
                     
-                    # Sofortiges Atomic-Writing in die CSV
+                    # Atomic Writing
                     pd.DataFrame([{
                         'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         'ISIN': isin,
                         'Price': round(price, 4),
-                        'Source': 'L&S_LIVE',
+                        'Source': 'L&S_WEB_LIVE',
                         'Anchor_Event': 'TRUE'
                     }]).to_csv(self.csv_path, mode='a', header=False, index=False)
 
