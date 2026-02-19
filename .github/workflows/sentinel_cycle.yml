@@ -1,8 +1,8 @@
-name: Aureum Sentinel V66 - Auditor
+name: Aureum Sentinel V67 - Final Sync
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/10 * * * *' # Wir erhöhen auf 10 Min, um Kollisionen zu vermeiden
   workflow_dispatch:
 
 permissions:
@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Wichtig für Rebase!
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -26,13 +28,16 @@ jobs:
       - name: Execute
         run: python sentinel_master.py
 
-      - name: Commit & Cleanup
+      - name: Smart Sync (Conflict Solver)
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
-          git gc --prune=now --aggressive
-          # Sicherer Add: Nur hinzufügen, was existiert
-          git add isin_pool.json
-          [ -f vault_health.json ] && git add vault_health.json
-          [ -d heritage_vault ] && git add heritage_vault/*.parquet
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Sentinel V66: Audit & Data [$(date)]" && git push)
+          
+          # 1. Hol dir die neuesten Änderungen vom Server (falls ein anderer Lauf fertig wurde)
+          git pull --rebase origin main
+          
+          # 2. Alles hinzufügen
+          git add isin_pool.json vault_status.txt heritage_vault/*.parquet
+          
+          # 3. Commit & Push
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Sentinel V67: Human Report & Deep Sync" && git push)
