@@ -1,2 +1,5 @@
-selenium
-webdriver-manager
+
+pandas
+requests
+yfinance
+fastparquet
