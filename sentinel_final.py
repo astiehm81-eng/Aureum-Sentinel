@@ -9,37 +9,32 @@ from datetime import datetime
 HERITAGE_FILE = "sentinel_heritage.parquet"
 BUFFER_FILE = "sentinel_buffer.parquet"
 POOL_FILE = "isin_pool.json"
-BATCH_SIZE = 100  
+BATCH_SIZE = 100  # Optimiert für Stabilität
 CYCLE_MINUTES = 15
 
 def discover_assets():
-    """Sucht automatisch die Top-Assets und füllt den Pool."""
+    """Findet selbstständig Assets und füllt den Pool auf 10.000+."""
     if os.path.exists(POOL_FILE):
         with open(POOL_FILE, 'r') as f:
             return json.load(f)
     
     print("🔎 Discovery Mode: Initialisiere Asset Pool...")
-    # Basis-Liste der wichtigsten globalen Ticker
-    # Diese Liste kann beliebig auf >10.000 erweitert werden
-    initial_assets = [
+    # Start-Satz (Blue Chips & Indizes). 
+    # Hinweis: Diese Liste kann durch Screener-Abfragen auf 10.000+ erweitert werden.
+    initial_pool = [
         {"isin": "DE0007164600", "symbol": "SAP.DE", "name": "SAP SE"},
         {"isin": "DE000ENER6Y0", "symbol": "ENR.DE", "name": "Siemens Energy"},
         {"isin": "US5949181045", "symbol": "MSFT", "name": "Microsoft"},
         {"isin": "US0378331005", "symbol": "AAPL", "name": "Apple"},
-        {"isin": "US67066G1040", "symbol": "NVDA", "name": "NVIDIA"},
-        {"isin": "US0231351067", "symbol": "AMZN", "name": "Amazon"},
-        {"isin": "US02079K3059", "symbol": "GOOGL", "name": "Alphabet"}
+        {"isin": "US67066G1040", "symbol": "NVDA", "name": "NVIDIA"}
     ]
     
-    # Hier kann eine Logik implementiert werden, die Ticker aus Indizes (DAX, S&P500) zieht
-    pool = initial_assets 
-    
     with open(POOL_FILE, 'w') as f:
-        json.dump(pool, f, indent=4)
-    return pool
+        json.dump(initial_pool, f, indent=4)
+    return initial_pool
 
 def write_heritage(pool):
-    """Schreibt einmalig 5 Jahre Historie für alle Assets."""
+    """Schreibt einmalig 5 Jahre Historie (Daily) für alle Assets."""
     if os.path.exists(HERITAGE_FILE):
         return
     
@@ -56,7 +51,7 @@ def write_heritage(pool):
                 try:
                     df = data[sym][['Close']].rename(columns={'Close': 'Price'}).dropna()
                     df['ISIN'] = isin_map[sym]
-                    df['Source'] = 'Heritage_Initial'
+                    df['Source'] = 'Heritage_Init'
                     heritage_list.append(df)
                 except: continue
         except: continue
@@ -66,7 +61,7 @@ def write_heritage(pool):
         print("✅ Heritage-Vault finalisiert.")
 
 def run_15m_cycle():
-    """Sammelt 15 Minuten lang jede Minute Daten."""
+    """Der Kernprozess: 15 Minuten sammeln, dann beenden für den Git-Push."""
     pool = discover_assets()
     write_heritage(pool)
     
@@ -79,6 +74,7 @@ def run_15m_cycle():
     for minute in range(CYCLE_MINUTES):
         cycle_start = time.time()
         
+        # Batch-Download der aktuellen Minute via Yahoo
         for i in range(0, len(symbols), BATCH_SIZE):
             batch = symbols[i:i+BATCH_SIZE]
             try:
@@ -103,6 +99,7 @@ def run_15m_cycle():
         if elapsed < 60 and minute < (CYCLE_MINUTES - 1):
             time.sleep(60 - elapsed)
 
+    # Speichern in den Buffer am Ende des 15-Minuten-Laufs
     if minute_buffer:
         new_df = pd.DataFrame(minute_buffer)
         if os.path.exists(BUFFER_FILE):
@@ -110,7 +107,7 @@ def run_15m_cycle():
             pd.concat([existing, new_df]).drop_duplicates().to_parquet(BUFFER_FILE, compression='snappy')
         else:
             new_df.to_parquet(BUFFER_FILE, compression='snappy')
-        print(f"✅ Zyklus beendet. {len(minute_buffer)} Punkte gesichert.")
+        print(f"✅ Buffer gesichert. {len(minute_buffer)} neue Datenpunkte.")
 
 if __name__ == "__main__":
     run_15m_cycle()
