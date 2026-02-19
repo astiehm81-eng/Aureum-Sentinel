@@ -2,99 +2,72 @@ import os
 import pandas as pd
 import yfinance as yf
 import requests
-import re
-import time
+import io
 from datetime import datetime
 
-class AureumSentinelCore:
-    def __init__(self):
-        # Konfiguration für Siemens Energy Testlauf
-        self.isin = "DE000ENER6Y0"
-        self.symbol = "ENR.DE"
-        self.storage_file = "sentinel_storage_enr.parquet"
+class AureumSentinelFusion:
+    def __init__(self, isin, symbol):
+        self.isin = isin
+        self.symbol = symbol
+        self.storage_file = f"sentinel_{isin}.parquet"
         
     def log(self, msg):
         print(f"[{datetime.now().strftime('%H:%M:%S')}] 🛡️ {msg}", flush=True)
 
-    def get_tradegate_price(self):
-        """Hard-Refresh direkt aus dem HTML-Quelltext von Tradegate"""
+    def get_tradegate_history(self):
+        """Lädt die echte CSV-Historie direkt von Tradegate ohne Webseiten-Scraping"""
         try:
-            url = f"https://www.tradegate.de/aktien.php?isin={self.isin}"
-            # Tarnung als echter Browser, um Blockaden zu vermeiden
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
-            }
-            
+            # Direkte URL zum CSV-Export (Beispielstruktur für Tradegate Historie)
+            url = f"https://www.tradegate.de/export.php?isin={self.isin}&type=csv"
+            headers = {'User-Agent': 'Mozilla/5.0'}
             res = requests.get(url, headers=headers, timeout=15)
             
-            # Suche nach dem Brief-Kurs (Ask)
-            match = re.search(r'id="ask">([\d\.,]+)</span>', res.text)
-            
-            if match:
-                # Konvertiert deutsches Format (1.234,56) in Float (1234.56)
-                price_str = match.group(1).replace('.', '').replace(',', '.')
-                return float(price_str)
-            else:
-                self.log("⚠️ Feld 'id=ask' nicht gefunden. Prüfe alternatives Muster...")
-                # Backup-Suche im Tabellen-Layout
-                match_alt = re.search(r'Brief.*?([\d\.,]+)</td>', res.text, re.DOTALL)
-                if match_alt:
-                    return float(match_alt.group(1).replace('.', '').replace(',', '.'))
-                    
+            if res.status_code == 200:
+                # Wir lesen die CSV ein (Tradegate nutzt oft Semikolon)
+                df_tg = pd.read_csv(io.StringIO(res.text), sep=';', decimal=',')
+                df_tg['Datum'] = pd.to_datetime(df_tg['Datum'], dayfirst=True)
+                df_tg = df_tg.rename(columns={'Schluss': 'Price', 'Datum': 'Date'})
+                return df_tg[['Date', 'Price']].set_index('Date')
         except Exception as e:
-            self.log(f"❌ Fehler bei Tradegate-Abfrage: {e}")
-        return None
+            self.log(f"Tradegate-Historie Export nicht verfügbar: {e}")
+        return pd.DataFrame()
 
-    def run(self):
-        self.log(f"🚀 Aureum Sentinel Lauf startet: {self.isin}")
+    def fuse_data(self):
+        self.log(f"Starte Daten-Fusion für {self.isin}")
         
-        # 1. Datenbasis laden oder 30J-Historie initialisieren
-        if not os.path.exists(self.storage_file):
-            self.log("Kein Speicher gefunden. Initialisiere 30J-Historie via Yahoo...")
-            try:
-                ticker = yf.Ticker(self.symbol)
-                # Holt die maximale verfügbare Historie
-                df = ticker.history(period="max")[['Close']]
-                df.columns = ['Price']
-                df['Source'] = 'Yahoo_Legacy'
-                df.index = pd.to_datetime(df.index)
-                self.log(f"✅ {len(df)} historische Datenpunkte von Yahoo geladen.")
-            except Exception as e:
-                self.log(f"❌ Kritischer Fehler beim Yahoo-Import: {e}")
-                return
-        else:
-            # Effizientes Einlesen des Parquet-Speichers
-            df = pd.read_parquet(self.storage_file)
-            self.log(f"Speicher geladen ({len(df)} Einträge).")
-
-        # 2. Aktuellen Kurs von Tradegate abrufen
-        live_price = self.get_tradegate_price()
+        # 1. Yahoo für die Langzeit-Basis (30 Jahre)
+        self.log("Beziehe Yahoo-Legacy Daten...")
+        y_data = yf.Ticker(self.symbol).history(period="max")[['Close']]
+        y_data.columns = ['Price']
+        y_data.index = pd.to_datetime(y_data.index).tz_localize(None)
         
-        if live_price:
-            last_recorded_price = df['Price'].iloc[-1]
-            # Berechnung der Abweichung für die 0,1%-Regel
-            diff = abs((live_price - last_recorded_price) / last_recorded_price)
+        # 2. Tradegate für die präzise Kurzzeit-Historie
+        self.log("Infiltriere Tradegate-Historie (CSV-Schnittstelle)...")
+        tg_data = self.get_tradegate_history()
+        
+        if not tg_data.empty:
+            # Die Flickstelle: Wir nehmen Yahoo bis zum Start von Tradegate
+            split_date = tg_data.index.min()
+            self.log(f"Flickstelle identifiziert bei: {split_date}")
             
-            self.log(f"Aktueller Tradegate-Kurs: {live_price} €")
-            self.log(f"Abweichung zum letzten Anker: {diff*100:.4f}%")
-
-            # 3. Ankerpunkt-Logik (Eiserner Standard)
-            if diff >= 0.001:
-                new_entry = pd.DataFrame([{
-                    'Price': live_price,
-                    'Source': 'Tradegate_Live'
-                }], index=[pd.Timestamp.now()])
-                
-                df_updated = pd.concat([df, new_entry])
-                # Speichern im platzsparenden Parquet-Format
-                df_updated.to_parquet(self.storage_file, compression='snappy')
-                self.log(f"✅ Neuer Ankerpunkt bei {live_price} € im Speicher fixiert.")
-            else:
-                self.log("⏳ Preisbewegung innerhalb des 0,1% Rauschfilters. Kein Update nötig.")
+            y_legacy = y_data[y_data.index < split_date].copy()
+            y_legacy['Source'] = 'Yahoo_Legacy'
+            
+            tg_current = tg_data.copy()
+            tg_current['Source'] = 'Tradegate_Archive'
+            
+            # Zusammenfügen
+            final_df = pd.concat([y_legacy, tg_current]).sort_index()
         else:
-            self.log("❌ Abbruch: Konnte keine validen Live-Daten von Tradegate extrahieren.")
+            self.log("⚠️ Tradegate-Archiv leer, nutze reinen Yahoo-Stock.")
+            final_df = y_data
+            final_df['Source'] = 'Yahoo_Only'
+
+        # Speichern
+        final_df.to_parquet(self.storage_file, compression='snappy')
+        self.log(f"✅ Fusion abgeschlossen. {len(final_df)} Datenpunkte im Speicher.")
 
 if __name__ == "__main__":
-    sentinel = AureumSentinelCore()
-    sentinel.run()
+    # Test mit Siemens Energy
+    fusion = AureumSentinelFusion("DE000ENER6Y0", "ENR.DE")
+    fusion.fuse_data()
