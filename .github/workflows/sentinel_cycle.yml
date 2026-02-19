@@ -1,4 +1,4 @@
-name: Aureum Sentinel V66 - Auditor & Sync
+name: Aureum Sentinel V66 - Auditor
 
 on:
   schedule:
@@ -11,39 +11,28 @@ permissions:
 jobs:
   sentinel_run:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1 # Spart Platz beim Klonen
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          cache: 'pip'
 
-      - name: Install High-Performance Modules
-        run: |
-          python -m pip install --upgrade pip
-          pip install pandas pandas-datareader yfinance pyarrow fastparquet requests numpy
+      - name: Install
+        run: pip install pandas pandas-datareader yfinance pyarrow numpy
 
-      - name: Execute Aureum Sentinel V66 & Audit
+      - name: Execute
         run: python sentinel_master.py
 
-      - name: Git Maintenance & Cleanup
+      - name: Commit & Cleanup
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
-          
-          # 1. Verwaiste Objekte durch Abbrüche entfernen
-          git reflog expire --expire=now --all
           git gc --prune=now --aggressive
-          
-          # 2. Daten für Commit vorbereiten
-          # Wir fügen den Pool, den Health-Report und die Shards hinzu
-          git add isin_pool.json vault_health.json heritage_vault/*.parquet
-          
-          # 3. Nur committen, wenn sich wirklich etwas geändert hat
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Sentinel V66: Health Audit & Data Sync [$(date)]" && git push)
+          # Sicherer Add: Nur hinzufügen, was existiert
+          git add isin_pool.json
+          [ -f vault_health.json ] && git add vault_health.json
+          [ -d heritage_vault ] && git add heritage_vault/*.parquet
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Sentinel V66: Audit & Data [$(date)]" && git push)
