@@ -1,14 +1,12 @@
-import os
+import pandas as pd
+import requests
 import time
+import os
 import random
 import re
-import pandas as pd
 from datetime import datetime
-from queue import Queue
 from concurrent.futures import ThreadPoolExecutor
-from playwright.sync_api import sync_playwright
-import pytesseract
-from PIL import Image, ImageOps, ImageEnhance
+from queue import Queue
 
 class AureumSentinel:
     def __init__(self):
@@ -16,77 +14,90 @@ class AureumSentinel:
         self.runtime_limit = 110
         self.start_time = time.time()
         self.task_queue = Queue()
-        # Eiserner Standard: Pfad für Tesseract
-        pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'
+        self.success_count = 0
+        # Eiserner Standard Header
+        self.agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/121.0.0.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/537.36'
+        ]
+
+    def log(self, message):
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] {message}")
 
     def get_universe(self):
-        import requests
+        """ Discovery mit Fehler-Logging """
         isins = set()
         try:
             res = requests.get("https://www.tradegate.de/index.php", timeout=5)
-            isins.update(re.findall(r'[A-Z]{2}[A-Z0-9]{9}[0-9]', res.text))
-        except: pass
+            found = re.findall(r'[A-Z]{2}[A-Z0-9]{9}[0-9]', res.text)
+            isins.update(found)
+            self.log(f"Discovery: {len(found)} ISINs auf Tradegate gefunden.")
+        except Exception as e:
+            self.log(f"FEHLER bei Discovery: {e}")
         return list(isins)
 
-    def optimize_image(self, path):
-        """ Kern-Verbesserung 2: Binarisierung für 99% OCR-Rate """
-        with Image.open(path) as img:
-            img = img.convert('L')  # Graustufen
-            img = img.resize((img.width * 2, img.height * 2), Image.Resampling.LANCZOS) # Vergrößern
-            enhancer = ImageEnhance.Contrast(img)
-            img = enhancer.enhance(2.0) # Kontrast hoch
-            img = img.point(lambda x: 0 if x < 128 else 255) # Hard Threshold
-            img.save(path)
-
     def worker_process(self, worker_id):
-        # Kern-Verbesserung 3: Versetzter Start (min 5ms)
-        time.sleep((worker_id * 0.7) + 0.005)
-
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page(viewport={'width': 800, 'height': 600})
-
-            while not self.task_queue.empty():
-                if time.time() - self.start_time > self.runtime_limit: break
-                isin = self.task_queue.get()
+        # Verbesserung 1: Staggered Start (min 5ms)
+        initial_wait = (worker_id * 0.5) + 0.005
+        time.sleep(initial_wait)
+        
+        session = requests.Session()
+        
+        while not self.task_queue.empty():
+            if time.time() - self.start_time > self.runtime_limit: break
+            isin = self.task_queue.get()
+            
+            # Verbesserung 2: Individueller Jitter (150-450ms)
+            time.sleep(random.uniform(0.15, 0.45))
+            
+            try:
+                # Verbesserung 3: Direkter JSON-Pfad (Umgeht visuelle Firewall)
+                # Wir simulieren den Request, den das Frontend für die Kurs-Box nutzt
+                url = f"https://www.ls-x.de/_rpc/json/.lstk.getQuote?isin={isin}"
+                headers = {
+                    'User-Agent': random.choice(self.agents),
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Referer': f'https://www.ls-x.de/de/aktie/{isin}'
+                }
                 
-                try:
-                    page.goto(f"https://www.ls-x.de/de/aktie/{isin}", wait_until="domcontentloaded")
+                res = session.get(url, timeout=7, headers=headers)
+                
+                if res.status_code == 200:
+                    data = res.json()
+                    # Pfad im JSON: price oder last_price
+                    price = data.get('price') or data.get('last')
                     
-                    # Kern-Verbesserung 1: Warten auf Preis-Stabilisierung
-                    selector = ".price-value"
-                    page.wait_for_selector(selector, timeout=8000)
-                    time.sleep(0.5) # Kurzer Puffer gegen Blinken
+                    if price:
+                        self._save_atomic(isin, float(price), worker_id)
+                        self.success_count += 1
+                    else:
+                        self.log(f"W{worker_id}: {isin} - JSON enthält keinen Preis (Block?)")
+                else:
+                    self.log(f"W{worker_id}: {isin} - HTTP {res.status_code}")
                     
-                    img_path = f"ocr_{worker_id}.png"
-                    page.locator(selector).first.screenshot(path=img_path)
-                    
-                    self.optimize_image(img_path)
-                    
-                    # OCR mit spezialisierten Parametern (digits only)
-                    config = '--psm 7 -c tessedit_char_whitelist=0123456789,.'
-                    raw_text = pytesseract.image_to_string(Image.open(img_path), config=config)
-                    
-                    price_match = re.search(r'(\d+[\.,]\d+)', raw_text)
-                    if price_match:
-                        price = float(price_match.group(1).replace(',', '.'))
-                        self._save_atomic(isin, price, worker_id)
-                except: pass
-                finally: self.task_queue.task_done()
-            browser.close()
+            except Exception as e:
+                self.log(f"W{worker_id}: Fehler bei {isin} -> {e}")
+            finally:
+                self.task_queue.task_done()
 
     def _save_atomic(self, isin, price, worker_id):
-        pd.DataFrame([{
+        # Jeder Preis über 0.1% ist ein Ankerpunkt
+        df = pd.DataFrame([{
             'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             'ISIN': isin, 'Price': round(price, 4),
-            'Source': f'W{worker_id}_V137_FINAL', 'Anchor_Event': 'TRUE'
-        }]).to_csv(self.csv_path, mode='a', header=not os.path.exists(self.csv_path), index=False)
+            'Source': f'W{worker_id}_V138', 'Anchor_Event': 'TRUE'
+        }])
+        df.to_csv(self.csv_path, mode='a', header=not os.path.exists(self.csv_path), index=False)
 
     def run(self):
         universe = self.get_universe()
         for isin in universe: self.task_queue.put(isin)
+        
+        self.log(f"STARTE V138 LITE | {len(universe)} ISINs | 5 Threads")
         with ThreadPoolExecutor(max_workers=5) as executor:
             for i in range(5): executor.submit(self.worker_process, i)
+        
+        self.log(f"LAUF BEENDET. Treffer: {self.success_count}")
 
 if __name__ == "__main__":
     AureumSentinel().run()
