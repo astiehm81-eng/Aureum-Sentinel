@@ -1,5 +1,34 @@
+name: Aureum Sentinel OCR
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/15 * * * *'
+
+jobs:
+  run-ocr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v3
+
+      - name: System-Pakete installieren
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-deu
+
+      - name: Python einrichten
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Bibliotheken installieren
+        run: |
+          pip install pandas requests playwright pytesseract Pillow
+          playwright install chromium
+          playwright install-deps chromium
+
       - name: OCR Batch ausführen
-        # Hier stand vorher sentinel_ocr.py -> Wir ändern es auf DEINEN Dateinamen:
         run: python -u sentinel_final.py
 
       - name: Fortschritt und Daten speichern
@@ -7,5 +36,5 @@
           git config --global user.name "Aureum-Bot"
           git config --global user.email "bot@aureum.com"
           git add sentinel_history.csv sentinel_data.txt
-          git commit -m "OCR Update" || echo "Kein Update"
+          git commit -m "OCR Update [skip ci]" || echo "Kein Update notwendig"
           git push
