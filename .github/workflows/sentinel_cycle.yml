@@ -1,4 +1,4 @@
-name: Aureum Sentinel V63 - Global Rollout
+name: Aureum Sentinel V66 - Auditor & Sync
 
 on:
   schedule:
@@ -15,6 +15,8 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1 # Spart Platz beim Klonen
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -25,15 +27,23 @@ jobs:
       - name: Install High-Performance Modules
         run: |
           python -m pip install --upgrade pip
-          pip install pandas pandas-datareader yfinance pyarrow fastparquet requests
+          pip install pandas pandas-datareader yfinance pyarrow fastparquet requests numpy
 
-      - name: Execute Aureum Sentinel V63
+      - name: Execute Aureum Sentinel V66 & Audit
         run: python sentinel_master.py
 
-      - name: Git Maintenance (Heavy Load)
+      - name: Git Maintenance & Cleanup
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
-          git gc --aggressive --prune=now
-          git add isin_pool.json heritage_vault/*.parquet
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Sentinel V63: Global Market Expansion [$(date)]" && git push)
+          
+          # 1. Verwaiste Objekte durch Abbrüche entfernen
+          git reflog expire --expire=now --all
+          git gc --prune=now --aggressive
+          
+          # 2. Daten für Commit vorbereiten
+          # Wir fügen den Pool, den Health-Report und die Shards hinzu
+          git add isin_pool.json vault_health.json heritage_vault/*.parquet
+          
+          # 3. Nur committen, wenn sich wirklich etwas geändert hat
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Sentinel V66: Health Audit & Data Sync [$(date)]" && git push)
