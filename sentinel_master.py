@@ -1,35 +1,38 @@
 import pandas as pd
 import pandas_datareader.data as web
-import yfinance as yf
 import os
 import json
 import time
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 
-# --- EISERNER STANDARD V60 (TEMPORAL SHARDING & AUTO-DISCOVERY) ---
+# --- EISERNER STANDARD V61 (ULTIMATE DISCOVERY & TEMPORAL VAULT) ---
 HERITAGE_DIR = "heritage_vault"
 POOL_FILE = "isin_pool.json"
-BUFFER_FILE = "sentinel_buffer.parquet"
 MAX_WORKERS = 40 
 
 def ensure_vault():
     if not os.path.exists(HERITAGE_DIR): os.makedirs(HERITAGE_DIR)
 
 def expand_pool_automatically():
-    """Sucht nach neuen Tickern und ersetzt PENDING-Platzhalter."""
+    """Injiziert eine massive Liste realer Ticker in die PENDING-Slots."""
     if not os.path.exists(POOL_FILE): return
     with open(POOL_FILE, 'r') as f: pool = json.load(f)
     
     current_tickers = {a['symbol'] for a in pool if "PENDING" not in a['symbol']}
     
-    # Discovery: Top-Indizes scannen (S&P 500, Nasdaq, DAX)
-    # Für den Massen-Rollout nutzen wir hier eine vordefinierte Wachstumsliste
+    # Massive Discovery-Liste (Auszug der wichtigsten globalen Ticker)
+    us_tech = ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA", "NVDA", "NFLX", "ADBE", "INTC", "AMD", "PYPL", "CSCO"]
+    us_bluechips = ["JPM", "V", "MA", "PG", "JNJ", "UNH", "HD", "BAC", "DIS", "KO", "PEP", "XOM", "CVX", "WMT", "COST"]
+    germany = ["SAP.DE", "SIE.DE", "ALV.DE", "DTE.DE", "MBG.DE", "BMW.DE", "BAS.DE", "BAYN.DE", "ADS.DE", "RWE.DE", "ENR.DE"]
+    uk_eu = ["ASML.NL", "MC.FR", "OR.FR", "RMS.FR", "SHEL.UK", "BP.UK", "HSBA.UK"]
+    
+    discovery_seeds = us_tech + us_bluechips + germany + uk_eu
     new_found = []
-    discovery_seeds = ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA", "NVDA", "BRK-B", "LLY", "AVGO", "V", "MA", "COST"]
     
     for t in discovery_seeds:
-        stooq_t = f"{t}.US"
+        # Falls kein Suffix da ist, .US annehmen (außer es ist .DE, .NL etc.)
+        stooq_t = t if "." in t else f"{t}.US"
         if stooq_t not in current_tickers:
             new_found.append({"symbol": stooq_t, "isin": "AUTO_DISCOVERED"})
             
@@ -41,13 +44,13 @@ def expand_pool_automatically():
                 count += 1
         with open(POOL_FILE, 'w') as f:
             json.dump(pool, f, indent=4)
-        print(f"✨ Discovery: {count} neue Ticker in Pool integriert.")
+        print(f"✨ Discovery: {count} neue Welt-Ticker in Pool integriert.")
 
 def fetch_deep_history(asset):
     symbol = asset['symbol']
     if "PENDING" in symbol: return None
     try:
-        # 40 Jahre Historie anpeilen
+        # 40 Jahre Historie für maximale Tiefe
         start = datetime.now() - timedelta(days=40*365)
         df = web.DataReader(symbol, 'stooq', start=start)
         if df is not None and not df.empty:
@@ -61,7 +64,6 @@ def fetch_deep_history(asset):
 
 def save_to_temporal_shards(df):
     ensure_vault()
-    # Jahrzehnt-Logik: 1990, 2000, 2010, 2020...
     df['Decade'] = (df['Date'].str[:4].astype(int) // 10) * 10
     
     for decade, group in df.groupby('Decade'):
@@ -74,14 +76,15 @@ def save_to_temporal_shards(df):
         
         save_group.to_parquet(shard_path, engine='pyarrow', index=False)
 
-def run_sentinel_v60():
+def run_sentinel_v61():
     ensure_vault()
     expand_pool_automatically()
     
+    if not os.path.exists(POOL_FILE): return
     with open(POOL_FILE, 'r') as f: pool = json.load(f)
     
-    print("🏛️ Deep History Sync (40 Years Target)...")
-    # Wir ziehen 150 Assets pro 5-Min-Lauf, um GitHub-Limits zu respektieren
+    print("🏛️ Deep History Sync (40 Years Sharding)...")
+    # 150 Assets pro Lauf für Stabilität
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         results = list(executor.map(fetch_deep_history, pool[:150]))
     
@@ -89,7 +92,7 @@ def run_sentinel_v60():
     if valid_data:
         full_df = pd.concat(valid_data)
         save_to_temporal_shards(full_df)
-        print(f"✅ {len(valid_data)} Assets zeitlich archiviert.")
+        print(f"✅ {len(valid_data)} Assets zeitlich im Vault archiviert.")
 
 if __name__ == "__main__":
-    run_sentinel_v60()
+    run_sentinel_v61()
