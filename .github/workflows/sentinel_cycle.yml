@@ -1,8 +1,8 @@
-name: Aureum Sentinel V67 - Final Sync
+name: Aureum Sentinel V68 - Final Clean
 
 on:
   schedule:
-    - cron: '*/10 * * * *' # Wir erhöhen auf 10 Min, um Kollisionen zu vermeiden
+    - cron: '*/15 * * * *' # Alle 15 Min für maximale Sicherheit
   workflow_dispatch:
 
 permissions:
@@ -15,7 +15,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Wichtig für Rebase!
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -23,21 +23,28 @@ jobs:
           python-version: '3.10'
 
       - name: Install
-        run: pip install pandas pandas-datareader yfinance pyarrow numpy
+        run: pip install pandas pandas-datareader pyarrow numpy
 
       - name: Execute
         run: python sentinel_master.py
 
-      - name: Smart Sync (Conflict Solver)
+      - name: Smart Sync & Deep Cleanup
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
           
-          # 1. Hol dir die neuesten Änderungen vom Server (falls ein anderer Lauf fertig wurde)
+          # 1. Konflikte vermeiden
           git pull --rebase origin main
           
-          # 2. Alles hinzufügen
-          git add isin_pool.json vault_status.txt heritage_vault/*.parquet
+          # 2. ALTE DATEIEN AKTIV ENTFERNEN (Müllabfuhr)
+          git rm -f sentinel_*.csv sentinel_*.parquet vault_health.json || true
           
-          # 3. Commit & Push
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Sentinel V67: Human Report & Deep Sync" && git push)
+          # 3. Neue Daten hinzufügen
+          git add isin_pool.json
+          [ -f vault_status.txt ] && git add vault_status.txt
+          [ -d heritage_vault ] && git add heritage_vault/*.parquet
+          
+          # 4. Git Datenbank komprimieren
+          git gc --prune=now --aggressive
+          
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Sentinel V68: Master Cleanup & Status Update" && git push)
