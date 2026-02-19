@@ -1,4 +1,4 @@
-name: Aureum Sentinel V145 - Matrix Staggered
+name: Aureum Sentinel V153 - Shadow Redirect
 
 on:
   workflow_dispatch:
@@ -9,34 +9,31 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Hier definieren wir 5 Segmente (0 bis 4)
         segment: [0, 1, 2, 3, 4]
     
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Install System Engine
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y tesseract-ocr libgbm-dev
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
 
-      - name: Install Python & Playwright
+      - name: Install Dependencies
         run: |
-          pip install pandas requests playwright pytesseract Pillow
+          pip install pandas requests playwright
           playwright install chromium
           playwright install-deps chromium
 
-      - name: Run Sentinel (Segmented & Unbuffered)
-        # Wir übergeben das Segment und die Gesamtanzahl
+      - name: Execute Shadow Pulse
         run: python -u sentinel_final.py --segment ${{ matrix.segment }} --total 5
 
-      - name: Commit and Push Data
-        # Wir nutzen einen Rebase-Mechanismus, falls mehrere Runner gleichzeitig pushen
+      - name: Push Data
         run: |
-          git config --global user.name "Aureum-Sentinel-Matrix"
+          git config --global user.name "Aureum-Bot"
           git config --global user.email "bot@aureum.com"
           git pull --rebase
           git add sentinel_history.csv
-          git commit -m "Update Segment ${{ matrix.segment }}" || echo "No changes"
+          git commit -m "V153 Segment ${{ matrix.segment }}" || echo "No changes"
           git push
