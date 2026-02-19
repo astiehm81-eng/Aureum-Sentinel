@@ -1,34 +1,45 @@
-name: Aureum Sentinel Full-Auto
+name: Aureum Sentinel 15m-Cycle
 
 on:
-  workflow_dispatch:
+  schedule:
+    # Startet alle 15 Minuten (Standard-Intervall für GitHub Cron)
+    - cron: '*/15 * * * *'
+  workflow_dispatch: # Ermöglicht manuellen Start
+
+permissions:
+  contents: write # Wichtig für den automatischen Push der Parquet-Dateien
 
 jobs:
-  build:
+  sentinel_run:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    # Verhindert, dass zwei Workflows gleichzeitig in die Dateien schreiben
+    concurrency:
+      group: sentinel-data-lock
+      cancel-in-progress: false 
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+          cache: 'pip'
 
       - name: Install Dependencies
-        run: pip install pandas yfinance requests
-
-      - name: Run Sentinel Core
-        run: python sentinel_final.py
-
-      - name: Commit and Push Changes
         run: |
-          git config --global user.name "Aureum-Sentinel-Bot"
-          git config --global user.email "sentinel@aureum.de"
-          # Wir nutzen einen Platzhalter, falls die Datei noch nicht im Repo ist
-          git add sentinel_master_storage.csv || echo "Datei wird neu erstellt"
-          git commit -m "Sentinel Update: $(date)" || echo "Nichts zu committen"
+          pip install pandas pyarrow yfinance
+
+      - name: Execute Sentinel Cycle
+        # Das Skript wird so konzipiert, dass es sich nach einem 15m-Block beendet
+        run: python sentinel_master.py
+
+      - name: Commit and Push Data
+        run: |
+          git config --local user.email "sentinel@aureum.ai"
+          git config --local user.name "Aureum Sentinel Bot"
+          git add sentinel_buffer.parquet sentinel_heritage.parquet isin_pool.json
+          # Nur committen, wenn sich tatsächlich Daten geändert haben
+          git diff --quiet && git diff --staged --quiet || git commit -m "🛡️ Sentinel: 15m Buffer Sync [$(date -u +'%Y-%m-%d %H:%M:%S')]"
           git push
