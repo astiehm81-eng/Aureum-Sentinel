@@ -1,5 +1,6 @@
-
 pandas
-requests
+pandas-datareader
 yfinance
+pyarrow
 fastparquet
+requests
