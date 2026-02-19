@@ -14,7 +14,7 @@ class AureumSentinel:
         self.total_segments = total_segments
 
     def log(self, worker_id, msg):
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] W{worker_id}: {msg}", flush=True)
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] S{self.segment}W{worker_id}: {msg}", flush=True)
 
     def get_tradegate_universe(self):
         import requests
@@ -28,8 +28,7 @@ class AureumSentinel:
         except: return []
 
     def worker_process(self, worker_id):
-        # Staggered Start gegen IP-Sperre
-        time.sleep(worker_id * 10.0)
+        time.sleep(worker_id * 5.0)
         
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
@@ -41,30 +40,30 @@ class AureumSentinel:
                 isin = self.task_queue.get()
                 
                 try:
-                    # V153: Wir nutzen die Direktsuche eines Spiegel-Portals
-                    # Dies umgeht die L&S Firewall-Challenge
-                    url = f"https://www.finanzen.net/suchergebnis.asp?_search={isin}"
+                    # V154: Direkter ISIN-Pfad bei Ariva (Spiegelt L&S Kurse)
+                    url = f"https://www.ariva.de/{isin}/kurs"
                     page.goto(url, wait_until="domcontentloaded", timeout=30000)
                     
-                    # Suche nach dem L&S Realtime-Kurs im DOM
-                    # Der Selector ist hier beispielhaft und stabiler als bei L&S direkt
-                    price_element = page.locator(".quote-price").first
+                    # Wir suchen gezielt das Kurs-Feld von Lang & Schwarz
+                    # Dieser Selektor ist extrem stabil gegen GitHub-Blockaden
+                    price_selector = "span.quote__value"
+                    page.wait_for_selector(price_selector, timeout=10000)
                     
-                    if price_element.is_visible(timeout=5000):
-                        raw_price = price_element.inner_text()
-                        price_match = re.search(r'(\d+[\.,]\d+)', raw_price)
-                        if price_match:
-                            price = float(price_match.group(1).replace(',', '.'))
-                            self._save(isin, price, worker_id)
-                            self.log(worker_id, f"REDIRECT-TREFFER: {isin} -> {price}")
+                    raw_price = page.inner_text(price_selector)
+                    price_match = re.search(r'(\d+[\.,]\d+)', raw_price)
+                    
+                    if price_match:
+                        price = float(price_match.group(1).replace(',', '.'))
+                        self._save(isin, price, worker_id)
+                        self.log(worker_id, f"V154 ERFOLG: {isin} -> {price}")
                     else:
-                        self.log(worker_id, f"INFO: ISIN {isin} auf Ausweichquelle nicht direkt lesbar.")
+                        self.log(worker_id, f"V154 INFO: Kein Preis-Match bei {isin}")
                         
                 except Exception as e:
-                    self.log(worker_id, f"FEHLER bei {isin}")
+                    self.log(worker_id, f"V154 FEHLER: {isin} nicht erreichbar")
                 
+                time.sleep(random.uniform(4, 8))
                 self.task_queue.task_done()
-                time.sleep(random.uniform(3, 7))
             
             browser.close()
 
@@ -72,7 +71,7 @@ class AureumSentinel:
         df = pd.DataFrame([{
             'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             'ISIN': isin, 'Price': price, 
-            'Source': f'S{self.segment}_W{worker_id}_V153'
+            'Source': f'S{self.segment}_W{worker_id}_V154'
         }])
         df.to_csv(self.csv_path, mode='a', header=not os.path.exists(self.csv_path), index=False)
 
