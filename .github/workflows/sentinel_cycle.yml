@@ -1,8 +1,8 @@
-name: Aureum Sentinel V69 - Live & Heritage
+name: Aureum Sentinel V70 - Final
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/10 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -22,18 +22,16 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Dependencies
+      - name: Install
         run: pip install pandas pandas-datareader pyarrow yfinance numpy
 
-      - name: Run Sentinel V69
+      - name: Run
         run: python sentinel_master.py
 
-      - name: Sync & Cleanup
+      - name: Sync
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
           git pull --rebase origin main
-          git rm -f sentinel_*.csv sentinel_*.parquet || true
           git add isin_pool.json vault_status.txt heritage_vault/*.parquet
-          git gc --prune=now --aggressive
-          git diff --quiet && git diff --staged --quiet || (git commit -m "V69: Live-Ticker & Deep Sync [$(date)]" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "V70: Robust Sync & Status" && git push)
