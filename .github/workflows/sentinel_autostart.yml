@@ -1,39 +1,47 @@
-name: Aureum Sentinel V153 - Shadow Redirect
+name: Aureum Sentinel - L&S OCR Reader
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Erlaubt manuellen Start per Button
+  schedule:
+    # Läuft automatisch alle 15 Minuten
+    - cron: '*/15 * * * *'
 
 jobs:
-  run-sentinel:
+  run-ocr:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        segment: [0, 1, 2, 3, 4]
+    # KEINE Matrix mehr! Nur ein einziger, unauffälliger Worker.
     
     steps:
-      - name: Checkout
+      - name: Repository auschecken
         uses: actions/checkout@v3
 
-      - name: Setup Python
+      - name: System-Pakete installieren (OCR)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
+
+      - name: Python-Umgebung einrichten
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: Install Dependencies
+      - name: Python-Bibliotheken installieren
         run: |
-          pip install pandas requests playwright
+          pip install pandas requests playwright pytesseract Pillow
           playwright install chromium
           playwright install-deps chromium
 
-      - name: Execute Shadow Pulse
-        run: python -u sentinel_final.py --segment ${{ matrix.segment }} --total 5
+      - name: OCR Micro-Batch ausführen
+        # Startet das Skript. Es liest ocr_progress.txt, macht 30 ISINs und stoppt.
+        run: python -u sentinel_ocr.py
 
-      - name: Push Data
+      - name: Fortschritt und Daten speichern
         run: |
           git config --global user.name "Aureum-Bot"
           git config --global user.email "bot@aureum.com"
           git pull --rebase
-          git add sentinel_history.csv
-          git commit -m "V153 Segment ${{ matrix.segment }}" || echo "No changes"
+          
+          # Wir speichern sowohl die Preise als auch den Lese-Fortschritt!
+          git add ls_prices.csv ocr_progress.txt
+          git commit -m "OCR Batch erfolgreich gelesen" || echo "Keine neuen Daten"
           git push
