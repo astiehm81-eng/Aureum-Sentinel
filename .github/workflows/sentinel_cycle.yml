@@ -27,12 +27,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas pandas-datareader yfinance pyarrow fastparquet requests
 
-      - name: Execute Aureum Sentinel V54
+      - name: Execute Aureum Sentinel V56
         run: python sentinel_master.py
 
       - name: Commit and Push Data
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
-          git add isin_pool.json sentinel_heritage.parquet sentinel_buffer.parquet
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Sentinel 10k+ Mass-Rollout [$(date)]" && git push)
+          # Wir fügen den gesamten Vault-Ordner hinzu
+          git add isin_pool.json heritage_vault/*.parquet sentinel_buffer.parquet
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Sentinel: Sharded Heritage Update [$(date)]" && git push)
