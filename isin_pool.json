@@ -1,0 +1,27 @@
+[
+    {
+        "isin": "DE0007164600",
+        "symbol": "SAP.DE",
+        "name": "SAP SE"
+    },
+    {
+        "isin": "DE000ENER6Y0",
+        "symbol": "ENR.DE",
+        "name": "Siemens Energy"
+    },
+    {
+        "isin": "US5949181045",
+        "symbol": "MSFT",
+        "name": "Microsoft"
+    },
+    {
+        "isin": "US0378331005",
+        "symbol": "AAPL",
+        "name": "Apple"
+    },
+    {
+        "isin": "US67066G1040",
+        "symbol": "NVDA",
+        "name": "NVIDIA"
+    }
+]
