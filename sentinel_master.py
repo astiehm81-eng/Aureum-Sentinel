@@ -1,52 +1,45 @@
 import pandas as pd
 import pandas_datareader.data as web
-import os, json, time
+import os, json, time, glob
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 
-# --- EISERNER STANDARD V67 (HUMAN AUDIT & AUTO-REBASE) ---
+# --- EISERNER STANDARD V68 (CLEAN ARCHITECTURE) ---
 HERITAGE_DIR = "heritage_vault"
 POOL_FILE = "isin_pool.json"
 HUMAN_REPORT = "vault_status.txt"
-MAX_WORKERS = 60 
 START_TIME = time.time()
 
-def generate_human_report():
-    """Erzeugt einen lesbaren Statusbericht statt kryptischem JSON."""
-    lines = [f"🛡️ AUREUM SENTINEL - STATUS BERICHT [{datetime.now().strftime('%Y-%m-%d %H:%M')}]", "="*50]
-    
-    if os.path.exists(HERITAGE_DIR):
-        total_assets_ever = 0
-        shards = sorted([f for f in os.listdir(HERITAGE_DIR) if f.endswith(".parquet")])
-        
-        for f in shards:
-            df = pd.read_parquet(os.path.join(HERITAGE_DIR, f))
-            count = int(df['Ticker'].nunique())
-            total_assets_ever = max(total_assets_ever, count)
-            rows = len(df)
-            lines.append(f"• {f:20} | Assets: {count:4} | Datenpunkte: {rows:,}")
-        
-        # Berechnung der Abdeckung (basierend auf deinem 10k Ziel)
-        coverage = (total_assets_ever / 10000) * 100
-        lines.append("="*50)
-        lines.append(f"📈 Marktabdeckung: {coverage:.2f}% von 10.000 Assets")
-        lines.append(f"🛡️ Daten-Integrität: 100% (Alle Shards mathematisch geprüft)")
-    else:
-        lines.append("⚠️ Heritage Vault noch leer oder im Aufbau.")
+def cleanup_legacy_garbage():
+    """Löscht alten Datenmüll aus dem Root-Verzeichnis."""
+    patterns = ["sentinel_*.csv", "sentinel_*.parquet", "sentinel_*.txt", "vault_health.json"]
+    for pattern in patterns:
+        for f in glob.glob(pattern):
+            try: os.remove(f)
+            except: pass
+    print("🧹 Legacy-Müll entfernt.")
 
+def generate_human_report():
+    """Erzeugt den Text-Statusbericht für das Handy."""
+    lines = [f"🛡️ AUREUM SENTINEL V68 - STATUS [{datetime.now().strftime('%d.%m. %H:%M')}]", "="*40]
+    if os.path.exists(HERITAGE_DIR):
+        files = sorted(os.listdir(HERITAGE_DIR))
+        total_assets = 0
+        for f in files:
+            if f.endswith(".parquet"):
+                df = pd.read_parquet(os.path.join(HERITAGE_DIR, f))
+                assets = int(df['Ticker'].nunique())
+                total_assets = max(total_assets, assets)
+                lines.append(f"{f[:15]:15} | {assets:4} Assets")
+        
+        coverage = (total_assets / 10000) * 100
+        lines.append("="*40)
+        lines.append(f"📊 Abdeckung: {coverage:.2f}% der 10k Assets")
+    else:
+        lines.append("Vault im Aufbau...")
+    
     with open(HUMAN_REPORT, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
-    print(f"📄 Text-Report erstellt: {HUMAN_REPORT}")
 
-# ... (Rest der fetch_data und save_shards Funktionen aus V66 bleibt gleich) ...
-
-def run_v67():
-    # ... (Sync-Logik wie V66) ...
-    # Am Ende des Laufs:
-    generate_human_report()
-
-if __name__ == "__main__":
-    # Stelle sicher, dass run_v67() aufgerufen wird
-    from datetime import datetime
-    import numpy as np
-    # (Integriere hier die restlichen Funktionen aus dem vorigen V66 Post)
+# ... (Hier die restlichen Funktionen fetch_data, save_shards, run_v68 einfügen) ...
+# WICHTIG: Am Ende von run_v68() muss generate_human_report() stehen!
