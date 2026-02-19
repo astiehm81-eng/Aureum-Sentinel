@@ -2,8 +2,8 @@ name: Aureum Sentinel 15m-Cycle
 
 on:
   schedule:
-    - cron: '*/15 * * * *' # Alle 15 Minuten
-  workflow_dispatch:
+    - cron: '*/15 * * * *' # Alle 15 Minuten triggern
+  workflow_dispatch: # Ermöglicht manuellen Start über das GitHub UI
 
 permissions:
   contents: write
@@ -11,6 +11,7 @@ permissions:
 jobs:
   sentinel_run:
     runs-on: ubuntu-latest
+    # Verhindert Schreibkonflikte durch gleichzeitige Runs
     concurrency:
       group: sentinel-data-lock
       cancel-in-progress: false 
@@ -29,6 +30,7 @@ jobs:
         run: pip install pandas pyarrow yfinance
 
       - name: Execute Sentinel Cycle
+        # Wichtig: Der Name muss exakt mit der Python-Datei übereinstimmen!
         run: python sentinel_master.py
 
       - name: Commit and Push Data
@@ -36,5 +38,5 @@ jobs:
           git config --local user.email "sentinel@aureum.ai"
           git config --local user.name "Aureum Sentinel Bot"
           git add sentinel_buffer.parquet sentinel_heritage.parquet isin_pool.json
-          git diff --quiet && git diff --staged --quiet || git commit -m "🛡️ Sentinel Update [$(date -u +'%Y-%m-%d %H:%M:%S')]"
+          git diff --quiet && git diff --staged --quiet || git commit -m "🛡️ Sentinel Sync [$(date -u +'%Y-%m-%d %H:%M:%S')]"
           git push
