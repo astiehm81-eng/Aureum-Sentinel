@@ -1,40 +1,34 @@
-name: Aureum Sentinel OCR
+name: Aureum Sentinel Core Run
 
 on:
-  workflow_dispatch:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '*/30 * * * *' # Alle 30 Minuten
+  workflow_dispatch:
 
 jobs:
-  run-ocr:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Repository auschecken
         uses: actions/checkout@v3
 
-      - name: System-Pakete installieren
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y tesseract-ocr tesseract-ocr-deu
-
       - name: Python einrichten
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.9'
 
-      - name: Bibliotheken installieren
+      - name: Abhängigkeiten installieren
         run: |
-          pip install pandas requests playwright pytesseract Pillow
-          playwright install chromium
-          playwright install-deps chromium
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-      - name: OCR Batch ausführen
-        run: python -u sentinel_final.py
+      - name: Sentinel Testlauf ausführen
+        run: python sentinel_final.py
 
       - name: Fortschritt und Daten speichern
         run: |
-          git config --global user.name "Aureum-Bot"
-          git config --global user.email "bot@aureum.com"
-          git add sentinel_history.csv sentinel_data.txt
-          git commit -m "OCR Update [skip ci]" || echo "Kein Update notwendig"
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add -A
+          git diff-index --quiet HEAD || git commit -m "Sentinel Update: Neue Ankerpunkte gesetzt"
           git push
