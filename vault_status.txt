@@ -1,0 +1,15 @@
+🛡️ AUREUM SENTINEL V71
+📅 Stand: 19.02. 22:55:10
+=============================================
+📊 REPO-STATUS:
+• heritage_shard_E.parquet |    1 Assets
+• heritage_shard_N.parquet |    1 Assets
+• history_1980s.parquet |    2 Assets
+• history_1990s.parquet |    3 Assets
+• history_2000s.parquet |    7 Assets
+• history_2010s.parquet |    8 Assets
+• history_2020s.parquet |   13 Assets
+=============================================
+🌏 GLOBAL-CHECK: USA/EU/ASIA integriert
+📈 ABDECKUNG: 0.12%
+🛡️ AUDITOR: 100% Sinnhaft (Ausreißer-Filter aktiv)
