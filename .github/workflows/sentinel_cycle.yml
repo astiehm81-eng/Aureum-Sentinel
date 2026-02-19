@@ -1,4 +1,4 @@
-name: Aureum Sentinel V70 - Final
+name: Aureum Sentinel V71 - Fixed Sync
 
 on:
   schedule:
@@ -25,13 +25,22 @@ jobs:
       - name: Install
         run: pip install pandas pandas-datareader pyarrow yfinance numpy
 
-      - name: Run
+      - name: Run Sentinel
         run: python sentinel_master.py
 
-      - name: Sync
+      - name: Smart Sync (Fixed Order)
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
-          git pull --rebase origin main
+          
+          # 1. Zuerst alle Änderungen vormerken (Staging)
           git add isin_pool.json vault_status.txt heritage_vault/*.parquet
-          git diff --quiet && git diff --staged --quiet || (git commit -m "V70: Robust Sync & Status" && git push)
+          
+          # 2. Dann einen temporären Commit machen
+          git commit -m "V71: Data Collection [$(date)]" || echo "No changes to commit"
+          
+          # 3. JETZT den Rebase ziehen (falls ein anderer Lauf fertig war)
+          git pull --rebase origin main
+          
+          # 4. Finaler Push
+          git push origin main
