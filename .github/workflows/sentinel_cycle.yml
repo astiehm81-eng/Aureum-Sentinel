@@ -1,4 +1,4 @@
-name: Aureum Sentinel Rapid-Cycle V61
+name: Aureum Sentinel V63 - Global Rollout
 
 on:
   schedule:
@@ -27,19 +27,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas pandas-datareader yfinance pyarrow fastparquet requests
 
-      - name: Execute Aureum Sentinel V61
+      - name: Execute Aureum Sentinel V63
         run: python sentinel_master.py
 
-      - name: Auto-Cleanup & Git Maintenance
-        run: |
-          # Löscht verwaiste temporäre Dateien
-          find . -name "*.tmp" -type f -delete
-          # Aggressive Git-Optimierung um Speicher zu sparen
-          git gc --aggressive --prune=now
-
-      - name: Commit and Push Data
+      - name: Git Maintenance (Heavy Load)
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
+          git gc --aggressive --prune=now
           git add isin_pool.json heritage_vault/*.parquet
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Sentinel V61: Ultimate Discovery & Deep History [$(date)]" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Sentinel V63: Global Market Expansion [$(date)]" && git push)
