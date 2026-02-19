@@ -1,50 +1,54 @@
 import pandas as pd
 import pandas_datareader.data as web
-import time
+import yfinance as yf
 import os
 import json
+import time
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 
-# --- EISERNER STANDARD V58 (FIX: DATAFRAME AMBIGUITY) ---
+# --- EISERNER STANDARD V60 (TEMPORAL SHARDING & AUTO-DISCOVERY) ---
 HERITAGE_DIR = "heritage_vault"
-BUFFER_FILE = "sentinel_buffer.parquet"
 POOL_FILE = "isin_pool.json"
+BUFFER_FILE = "sentinel_buffer.parquet"
 MAX_WORKERS = 40 
-CYCLE_MINUTES = 4 
 
 def ensure_vault():
-    if not os.path.exists(HERITAGE_DIR):
-        os.makedirs(HERITAGE_DIR)
+    if not os.path.exists(HERITAGE_DIR): os.makedirs(HERITAGE_DIR)
 
-def get_shard_path(symbol):
-    shard = symbol[0].upper() if symbol[0].isalpha() else "NUM"
-    return os.path.join(HERITAGE_DIR, f"heritage_shard_{shard}.parquet")
-
-def get_extensive_pool():
-    if os.path.exists(POOL_FILE):
-        with open(POOL_FILE, 'r') as f:
-            pool = json.load(f)
-            if len(pool) >= 10000: return pool
+def expand_pool_automatically():
+    """Sucht nach neuen Tickern und ersetzt PENDING-Platzhalter."""
+    if not os.path.exists(POOL_FILE): return
+    with open(POOL_FILE, 'r') as f: pool = json.load(f)
     
-    markets = [".US", ".DE", ".UK", ".JP", ".FR", ".CH"]
-    base_tickers = ["SAP", "ENR", "AAPL", "MSFT", "ASML", "TSLA", "NVDA", "AMZN"]
-    extensive_pool = []
-    for m in markets:
-        for t in base_tickers:
-            extensive_pool.append({"symbol": f"{t}{m}", "isin": "KNOWN"})
-    while len(extensive_pool) < 10500:
-        extensive_pool.append({"symbol": f"ASSET_{len(extensive_pool)}.US", "isin": "PENDING"})
+    current_tickers = {a['symbol'] for a in pool if "PENDING" not in a['symbol']}
     
-    with open(POOL_FILE, 'w') as f:
-        json.dump(extensive_pool, f, indent=4)
-    return extensive_pool
+    # Discovery: Top-Indizes scannen (S&P 500, Nasdaq, DAX)
+    # Für den Massen-Rollout nutzen wir hier eine vordefinierte Wachstumsliste
+    new_found = []
+    discovery_seeds = ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA", "NVDA", "BRK-B", "LLY", "AVGO", "V", "MA", "COST"]
+    
+    for t in discovery_seeds:
+        stooq_t = f"{t}.US"
+        if stooq_t not in current_tickers:
+            new_found.append({"symbol": stooq_t, "isin": "AUTO_DISCOVERED"})
+            
+    if new_found:
+        count = 0
+        for i, asset in enumerate(pool):
+            if "PENDING" in asset['symbol'] and count < len(new_found):
+                pool[i] = new_found[count]
+                count += 1
+        with open(POOL_FILE, 'w') as f:
+            json.dump(pool, f, indent=4)
+        print(f"✨ Discovery: {count} neue Ticker in Pool integriert.")
 
-def fetch_engine(asset, mode="live"):
+def fetch_deep_history(asset):
     symbol = asset['symbol']
-    if "ASSET_" in symbol: return None
+    if "PENDING" in symbol: return None
     try:
-        start = (datetime.now() - timedelta(days=10*365)) if mode == "heritage" else datetime.now()
+        # 40 Jahre Historie anpeilen
+        start = datetime.now() - timedelta(days=40*365)
         df = web.DataReader(symbol, 'stooq', start=start)
         if df is not None and not df.empty:
             df = df.reset_index()
@@ -52,56 +56,40 @@ def fetch_engine(asset, mode="live"):
             df = df[['Date', 'Close']].rename(columns={'Close': 'Price'})
             df['Ticker'] = symbol
             df['Date'] = df['Date'].dt.strftime('%Y-%m-%d')
-            df['Timestamp_Sentinel'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             return df
     except: return None
 
-def save_to_shards(df):
+def save_to_temporal_shards(df):
     ensure_vault()
-    for ticker in df['Ticker'].unique():
-        path = get_shard_path(ticker)
-        data = df[df['Ticker'] == ticker]
-        if os.path.exists(path):
-            existing = pd.read_parquet(path)
-            data = pd.concat([existing, data]).drop_duplicates(subset=['Ticker', 'Date'])
-        data.to_parquet(path, engine='pyarrow', index=False)
-
-def run_rapid_cycle():
-    pool = get_extensive_pool()
-    ensure_vault()
+    # Jahrzehnt-Logik: 1990, 2000, 2010, 2020...
+    df['Decade'] = (df['Date'].str[:4].astype(int) // 10) * 10
     
-    # 1. HERITAGE SYNC
-    print("🏛️ Sharded Heritage Sync...")
+    for decade, group in df.groupby('Decade'):
+        shard_path = os.path.join(HERITAGE_DIR, f"history_{decade}s.parquet")
+        save_group = group.drop(columns=['Decade'])
+        
+        if os.path.exists(shard_path):
+            existing = pd.read_parquet(shard_path)
+            save_group = pd.concat([existing, save_group]).drop_duplicates(subset=['Ticker', 'Date'])
+        
+        save_group.to_parquet(shard_path, engine='pyarrow', index=False)
+
+def run_sentinel_v60():
+    ensure_vault()
+    expand_pool_automatically()
+    
+    with open(POOL_FILE, 'r') as f: pool = json.load(f)
+    
+    print("🏛️ Deep History Sync (40 Years Target)...")
+    # Wir ziehen 150 Assets pro 5-Min-Lauf, um GitHub-Limits zu respektieren
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        h_results = list(executor.map(lambda a: fetch_engine(a, "heritage"), pool[:200]))
+        results = list(executor.map(fetch_deep_history, pool[:150]))
     
-    # FIX: Sicherer Check auf gültige Ergebnisse
-    valid_h_data = [r for r in h_results if r is not None and isinstance(r, pd.DataFrame)]
-    if valid_h_data:
-        h_data_combined = pd.concat(valid_h_data)
-        save_to_shards(h_data_combined)
-
-    # 2. LIVE TICKER
-    live_samples = []
-    print(f"⏱️ Live-Check ({CYCLE_MINUTES} Min)...")
-    for i in range(CYCLE_MINUTES):
-        start_t = time.time()
-        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            l_res = list(executor.map(lambda a: fetch_engine(a, "live"), pool[:50]))
-        
-        live_samples.extend([r for r in l_res if r is not None and isinstance(r, pd.DataFrame)])
-        
-        elapsed = time.time() - start_t
-        if i < CYCLE_MINUTES - 1 and elapsed < 60: time.sleep(60 - elapsed)
-
-    if live_samples:
-        new_l = pd.concat(live_samples)
-        if os.path.exists(BUFFER_FILE):
-            existing_buffer = pd.read_parquet(BUFFER_FILE)
-            new_l = pd.concat([existing_buffer, new_l])
-        new_l.tail(10000).to_parquet(BUFFER_FILE, engine='pyarrow', index=False)
-    
-    print("✅ Zyklus V58 stabil beendet.")
+    valid_data = [r for r in results if r is not None and isinstance(r, pd.DataFrame)]
+    if valid_data:
+        full_df = pd.concat(valid_data)
+        save_to_temporal_shards(full_df)
+        print(f"✅ {len(valid_data)} Assets zeitlich archiviert.")
 
 if __name__ == "__main__":
-    run_rapid_cycle()
+    run_sentinel_v60()
