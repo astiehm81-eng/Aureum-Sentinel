@@ -5,106 +5,85 @@ import os
 import random
 import re
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
 
 class AureumSentinel:
     def __init__(self):
         self.anchors = {}
         self.csv_path = "sentinel_history.csv"
-        # Verlängerte Testzeit auf 120s für tiefere Suche
-        self.runtime_limit = 120 
+        self.runtime_limit = 90 
+        self.start_time = time.time()
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language': 'de-DE,de;q=0.9,en-US;q=0.8',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/121.0.0.0',
+            'Accept': 'text/html,application/xhtml+xml',
+            'Referer': 'https://www.ls-x.de/'
         })
         self._clean_legacy_data()
 
     def _clean_legacy_data(self):
-        """ Entfernt Yahoo-Backfills beim Start """
         if os.path.exists(self.csv_path):
             try:
                 df = pd.read_csv(self.csv_path)
                 df[df['Source'] != 'YAHOO_BACKFILL'].to_csv(self.csv_path, index=False)
             except: pass
 
-    def get_massive_universe(self):
-        """ Discovery über Tradegate-Sektoren (DAX, Tech, US) """
-        all_isins = set()
-        # Wir nehmen mehrere Listen, um die 38er-Grenze zu sprengen
-        targets = [
-            "https://www.tradegate.de/index.php",
-            "https://www.tradegate.de/ausfuehrungen.php?index=DAX",
-            "https://www.tradegate.de/ausfuehrungen.php?index=US_TEC"
-        ]
-        for url in targets:
+    def get_market_universe(self):
+        """ Discovery über Tradegate-Sektoren """
+        isins = set()
+        for url in ["https://www.tradegate.de/index.php", "https://www.tradegate.de/ausfuehrungen.php?index=DAX"]:
             try:
-                res = self.session.get(url, timeout=10)
-                all_isins.update(re.findall(r'[A-Z]{2}[A-Z0-9]{9}[0-9]', res.text))
+                res = self.session.get(url, timeout=5)
+                isins.update(re.findall(r'[A-Z]{2}[A-Z0-9]{9}[0-9]', res.text))
             except: continue
-        return list(all_isins)
+        return list(isins)
 
-    def fetch_via_ls_search(self, isin):
-        """ 
-        STABILE LOGIK: Suche über L&S Webseite, nicht über API.
-        Simuliert ISIN-Eingabe und Auslesen der Zielseite.
-        """
-        search_url = f"https://www.ls-x.de/de/aktie/{isin}"
+    def fetch_worker_task(self, isin):
+        """ Ein einzelner Worker (Tab) mit Micro-Jitter """
+        if time.time() - self.start_time > self.runtime_limit:
+            return
+
+        # Der entscheidende Micro-Jitter (Millisekunden-Bereich)
+        time.sleep(random.uniform(0.2, 0.8))
+        
+        url = f"https://www.ls-x.de/de/aktie/{isin}"
         try:
-            # Menschliche Pause vor der "Suche"
-            time.sleep(random.uniform(1.5, 3.0))
-            
-            # Hard Refresh der Webseite
-            response = self.session.get(search_url, timeout=10, headers={'Referer': 'https://www.ls-x.de/'})
-            
-            if response.status_code == 200:
-                # Regex Suche nach dem Preis im HTML-Body (Eiserner Standard Extraktion)
-                # Wir suchen nach dem Muster: "price":175.45 oder ähnlichen Daten-Tags im HTML
-                price_match = re.search(r'last":([\d.]+)', response.text)
-                if not price_match:
-                    # Alternativer Matcher für HTML-Darstellung
-                    price_match = re.search(r'price-value">([\d,.]+)', response.text)
-                
-                if price_match:
-                    price_str = price_match.group(1).replace(',', '.')
-                    return float(price_str)
-        except:
-            return None
+            res = self.session.get(url, timeout=5)
+            if res.status_code == 200:
+                match = re.search(r'price-value">([\d,.]+)', res.text)
+                if match:
+                    price = float(match.group(1).replace('.', '').replace(',', '.'))
+                    self._process_price(isin, price)
+        except: pass
+
+    def _process_price(self, isin, price):
+        """ Prüft 0,1% Regel und schreibt sofort """
+        if isin not in self.anchors or abs(price - self.anchors[isin]) / self.anchors[isin] > 0.001:
+            self.anchors[isin] = price
+            pd.DataFrame([{
+                'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'ISIN': isin,
+                'Price': round(price, 4),
+                'Source': 'L&S_MULTI_WORKER',
+                'Anchor_Event': 'TRUE'
+            }]).to_csv(self.csv_path, mode='a', header=False, index=False)
 
     def run_monitoring(self):
-        start_time = time.time()
-        universe = self.get_massive_universe()
+        universe = self.get_market_universe()
+        random.shuffle(universe)
         
-        # Start-Log
+        # Start-Eintrag
         pd.DataFrame([{
             'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            'ISIN': 'V124_IRON_SEARCH',
+            'ISIN': 'V127_MULTI_TAB_MODE',
             'Price': len(universe),
-            'Source': 'LS_WEB_SEARCH',
-            'Anchor_Event': 'START'
+            'Source': 'SYSTEM',
+            'Anchor_Event': 'INIT'
         }]).to_csv(self.csv_path, mode='a', header=not os.path.exists(self.csv_path), index=False)
 
-        random.shuffle(universe)
-
-        for isin in universe:
-            if time.time() - start_time > self.runtime_limit:
-                break
-                
-            price = self.fetch_via_ls_search(isin)
-            if price and price > 0.1:
-                if isin not in self.anchors or abs(price - self.anchors[isin]) / self.anchors[isin] > 0.001:
-                    self.anchors[isin] = price
-                    
-                    # Atomic Writing
-                    pd.DataFrame([{
-                        'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        'ISIN': isin,
-                        'Price': round(price, 4),
-                        'Source': 'L&S_WEB_LIVE',
-                        'Anchor_Event': 'TRUE'
-                    }]).to_csv(self.csv_path, mode='a', header=False, index=False)
+        # 3 Parallele Worker simulieren die Tabs
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            executor.map(self.fetch_worker_task, universe)
 
 if __name__ == "__main__":
     AureumSentinel().run_monitoring()
