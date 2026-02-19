@@ -1,4 +1,4 @@
-name: Aureum Sentinel V137 - Eiserner Standard FINAL
+name: Aureum Sentinel V138 - Eiserner Standard Lite
 
 on:
   workflow_dispatch:
@@ -15,24 +15,16 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install System Engine
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y tesseract-ocr libgbm-dev
+      - name: Install Dependencies
+        run: pip install pandas requests
 
-      - name: Install Python Logic
-        run: |
-          pip install pandas requests playwright pytesseract Pillow
-          playwright install chromium
-          playwright install-deps
-
-      - name: Execute Aureum Sentinel
+      - name: Run Sentinel
         run: python sentinel_final.py
 
-      - name: Push Data
+      - name: Push CSV
         run: |
           git config --global user.name "Aureum-Bot"
           git config --global user.email "bot@aureum.com"
           git add sentinel_history.csv
-          git commit -m "Update V137" || echo "No changes"
+          git commit -m "V138 Update: $(date)" || echo "No changes"
           git push
