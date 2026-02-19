@@ -1,62 +1,85 @@
 import pandas as pd
 import yfinance as yf
-from concurrent.futures import ThreadPoolExecutor
+import time
 import os
 import json
-import sys
+from datetime import datetime
+import io
 
-# Konfiguration
-MASTER_VAULT = "sentinel_vault.parquet"
+BUFFER_FILE = "sentinel_buffer.parquet"
 POOL_FILE = "isin_pool.json"
+BATCH_SIZE = 50 
 
-def fetch_worker_batch(batch_assets):
-    """Holt Daten für einen spezifischen Batch aus dem Pool"""
-    results = []
+def update_isin_pool():
+    """Füllt den Pool selbsttätig mit den wichtigsten globalen Assets"""
+    if os.path.exists(POOL_FILE):
+        return # Pool ist bereits initialisiert
+        
+    print("🔎 Initialisiere ISIN-Pool (Top 10.000)...")
+    # Hier nutzen wir vordefinierte Ticker-Listen (Indizes)
+    # Beispielhaft starten wir mit den großen Indizes:
+    base_tickers = ["^GDAXI", "^NDX", "^GSPC", "^STOXX50E"] 
+    # In der Vollversion ziehen wir hier 10.000 Ticker via Screener
+    pool = [{"isin": "DE0007164600", "symbol": "SAP.DE"}, {"isin": "DE000ENER6Y0", "symbol": "ENR.DE"}]
     
-    # ThreadPool für maximale Geschwindigkeit innerhalb des Workers
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        future_to_asset = {executor.submit(get_single_quote, a): a for a in batch_assets}
-        for future in future_to_asset:
-            res = future.result()
-            if res: results.append(res)
-    return results
+    with open(POOL_FILE, 'w') as f:
+        json.dump(pool, f)
 
-def get_single_quote(asset):
-    try:
-        # Nutzung des 1-Minuten-Intervalls (Eiserner Standard)
-        ticker = yf.Ticker(asset['symbol'])
-        df = ticker.history(period="1d", interval="1m").tail(1)
-        if not df.empty:
-            return {
-                'Timestamp': df.index[0].tz_localize(None),
-                'Price': float(df['Close'].iloc[0]),
-                'ISIN': asset['isin'],
-                'Source': 'Yahoo_Live_1m'
-            }
-    except: return None
-
-def run():
-    # 1. Pool laden
+def run_sentinel_collector():
+    update_isin_pool()
     with open(POOL_FILE, 'r') as f:
-        full_pool = json.load(f)
-
-    # 2. Segmentierung (Jeder Worker bekommt via CLI-Argument seinen Teil)
-    # Beispiel: python sentinel_worker.py 0 100 (bearbeitet die ersten 100)
-    start_idx = int(sys.argv[1]) if len(sys.argv) > 1 else 0
-    end_idx = int(sys.argv[2]) if len(sys.argv) > 2 else 100
+        pool = json.load(f)
     
-    my_batch = full_pool[start_idx:end_idx]
-    print(f"👷 Worker übernimmt ISIN-Pool Segment {start_idx} bis {end_idx}")
+    symbols = [s['symbol'] for s in pool]
+    isin_map = {s['symbol']: s['isin'] for s in pool}
+    
+    minute_buffer = []
+    last_save = time.time()
 
-    # 3. Daten sammeln
-    new_data_list = fetch_worker_batch(my_batch)
-    new_df = pd.DataFrame(new_data_list)
+    print(f"🚀 Sammler aktiv für {len(symbols)} Assets. Modus: Yahoo-Live.")
 
-    # 4. Atomic Write (Verhindert Datei-Korruption)
-    if not new_df.empty:
-        temp_file = f"temp_batch_{start_idx}.parquet"
-        new_df.to_parquet(temp_file)
-        print(f"💾 Batch in {temp_file} zwischengespeichert.")
+    while True:
+        cycle_start = time.time()
+        
+        # BATCH-DOWNLOAD (Jede Minute)
+        try:
+            # Wir ziehen alle Symbole des Pools in Batches
+            for i in range(0, len(symbols), BATCH_SIZE):
+                batch = symbols[i:i+BATCH_SIZE]
+                data = yf.download(batch, period="1d", interval="1m", progress=False, group_by='ticker').tail(1)
+                
+                for sym in batch:
+                    # Sicherstellen, dass wir den Preis extrahieren (Multi-Index Handling)
+                    try:
+                        price = data[sym]['Close'].iloc[0]
+                        if not pd.isna(price):
+                            minute_buffer.append({
+                                'Timestamp': data.index[0].tz_localize(None),
+                                'Price': float(price),
+                                'ISIN': isin_map[sym]
+                            })
+                    except: continue
+        except Exception as e:
+            print(f"⚠️ API-Fehler: {e}")
+
+        # SCHREIB-CHECK (Alle 15 Minuten)
+        if time.time() - last_save >= 900: # 900 Sek = 15 Min
+            if minute_buffer:
+                new_df = pd.DataFrame(minute_buffer)
+                if os.path.exists(BUFFER_FILE):
+                    master = pd.read_parquet(BUFFER_FILE)
+                    pd.concat([master, new_df]).drop_duplicates().to_parquet(BUFFER_FILE)
+                else:
+                    new_df.to_parquet(BUFFER_FILE)
+                
+                print(f"💾 {datetime.now().strftime('%H:%M')}: Block gesichert. Buffer geleert.")
+                minute_buffer = [] 
+                last_save = time.time()
+
+        # Warten bis zur nächsten Minute
+        sleep_time = 60 - (time.time() - cycle_start)
+        if sleep_time > 0:
+            time.sleep(sleep_time)
 
 if __name__ == "__main__":
-    run()
+    run_sentinel_collector()
