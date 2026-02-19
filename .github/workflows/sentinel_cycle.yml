@@ -1,4 +1,4 @@
-name: Aureum Sentinel Rapid-Cycle V60
+name: Aureum Sentinel Rapid-Cycle V61
 
 on:
   schedule:
@@ -27,20 +27,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas pandas-datareader yfinance pyarrow fastparquet requests
 
-      - name: Execute Aureum Sentinel V60
+      - name: Execute Aureum Sentinel V61
         run: python sentinel_master.py
 
-      - name: Data Cleanup & Maintenance
+      - name: Auto-Cleanup & Git Maintenance
         run: |
-          # Löscht temporäre Dateien oder Buffer, die älter als 3 Tage sind (optional)
-          find . -name "*.tmp" -type f -mtime +3 -delete
-          # Verhindert, dass der Git-Index durch zu viele kleine Änderungen korrumpiert
-          git gc --prune=now --aggressive
+          # Löscht verwaiste temporäre Dateien
+          find . -name "*.tmp" -type f -delete
+          # Aggressive Git-Optimierung um Speicher zu sparen
+          git gc --aggressive --prune=now
 
       - name: Commit and Push Data
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
-          # Alle Jahrzehnt-Shards und den Pool sichern
           git add isin_pool.json heritage_vault/*.parquet
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Sentinel V60: Temporal Archive Update [$(date)]" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Sentinel V61: Ultimate Discovery & Deep History [$(date)]" && git push)
