@@ -6,70 +6,75 @@ import json
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 
-# --- KONFIGURATION (EISERNER STANDARD V50) ---
+# --- EISERNER STANDARD V52 (RAPID-CYCLE) ---
 HERITAGE_FILE = "sentinel_heritage.parquet"
+BUFFER_FILE = "sentinel_buffer.parquet"
 POOL_FILE = "isin_pool.json"
-MAX_WORKERS = 30  # Maximale Power für 10k Assets
+MAX_WORKERS = 50  # Erhöht für massives Multithreading
+CYCLE_MINUTES = 4 # Wir sammeln 4 Min, um 1 Min Puffer für den Push zu haben
 
-def check_modules():
-    """Validiert, ob alle High-Performance Module geladen sind."""
-    try:
-        import pyarrow
-        import pandas_datareader
-        print("✅ System-Check: Alle Module (pyarrow, stooq-reader) einsatzbereit.")
-    except ImportError as e:
-        print(f"❌ KRITISCH: Modul fehlt: {e}. Bitte requirements.txt prüfen!")
-
-def build_10k_discovery():
-    """Erstellt den Pool, falls er noch nicht existiert."""
+def get_pool():
     if os.path.exists(POOL_FILE):
         with open(POOL_FILE, 'r') as f: return json.load(f)
-    
-    print("🛰️ Discovery: Generiere Basis-Pool...")
-    # Hier füllen wir mit echten Stooq-Tickern auf
-    pool = [{"symbol": s, "isin": "AUTO"} for s in ["SAP.DE", "ENR.DE", "AAPL.US", "MSFT.US"]]
-    # Wir fügen Platzhalter hinzu, die wir sukzessive mit echten Welt-Tickern ersetzen
-    for i in range(len(pool), 10000):
-        pool.append({"symbol": f"PENDING_{i}", "isin": "PENDING"})
-    
-    with open(POOL_FILE, 'w') as f:
-        json.dump(pool, f, indent=4)
-    return pool
+    return []
 
-def fetch_stooq_engine(asset):
-    """Kern-Engine für den Stooq-Abruf."""
+def fetch_data_engine(asset, mode="heritage"):
     symbol = asset['symbol']
-    if "PENDING" in symbol: return None
     try:
-        start = datetime.now() - timedelta(days=5*365) # 5 Jahre Historie
-        df = web.DataReader(symbol, 'stooq', start=start)
+        if mode == "heritage":
+            start = datetime.now() - timedelta(days=5*365)
+            df = web.DataReader(symbol, 'stooq', start=start)
+        else: # Live-Mode
+            df = web.DataReader(symbol, 'stooq')
+        
         if not df.empty:
-            df = df[['Close']].rename(columns={'Close': 'Price'})
+            df = df[['Close']].iloc[:1].rename(columns={'Close': 'Price'})
             df['Ticker'] = symbol
+            df['Timestamp'] = datetime.now()
             return df
-    except:
-        return None
+    except: return None
 
-def main():
-    check_modules()
-    pool = build_10k_discovery()
+def run_rapid_cycle():
+    pool = get_pool()
+    if not pool: return
     
-    # Verarbeite 500 Assets pro Zyklus (Stooq Rate-Limit Schutz)
-    target_list = [a for a in pool if "PENDING" not in a['symbol']][:500]
+    # 1. HERITAGE TURBO (Verarbeite die nächsten 1000 Assets parallel)
+    # Wir suchen Assets, die noch nicht in der Heritage sind
+    target_heritage = pool[:1000] 
+    print(f"🚀 Heritage-Turbo: Sync für {len(target_heritage)} Assets...")
     
-    print(f"🏛️ Starte parallele Heritage-Erweiterung ({len(target_list)} Assets)...")
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        results = list(executor.map(fetch_stooq_engine, target_list))
+        h_results = list(executor.map(lambda a: fetch_data_engine(a, "heritage"), target_heritage))
     
-    valid_data = [r for r in results if r is not None]
-    if valid_data:
-        final_df = pd.concat(valid_data)
-        # Speichern mit 'pyarrow' Engine für Speed
+    # 2. LIVE-COLLECTOR (Sammelt jede Minute Daten für 4 Minuten)
+    live_samples = []
+    print(f"⏱️ Live-Check gestartet für {CYCLE_MINUTES} Minuten...")
+    for i in range(CYCLE_MINUTES):
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            l_results = list(executor.map(lambda a: fetch_data_engine(a, "live"), pool[:50])) # Top Assets
+        live_samples.extend([r for r in l_results if r is not None])
+        if i < CYCLE_MINUTES - 1: time.sleep(60)
+
+    # 3. DATEN-SICHERUNG (PARALLEL & SNAPPY)
+    save_data(h_results, live_samples)
+
+def save_data(h_res, l_res):
+    # Heritage speichern
+    h_data = [r for r in h_res if r is not None]
+    if h_data:
+        df_h = pd.concat(h_data).reset_index()
         if os.path.exists(HERITAGE_FILE):
-            existing = pd.read_parquet(HERITAGE_FILE)
-            final_df = pd.concat([existing, final_df]).drop_duplicates()
-        final_df.to_parquet(HERITAGE_FILE, engine='pyarrow', compression='snappy')
-        print(f"✅ Batch abgeschlossen. Heritage-Vault aktualisiert.")
+            df_h = pd.concat([pd.read_parquet(HERITAGE_FILE), df_h]).drop_duplicates(subset=['Ticker', 'Date'])
+        df_h.to_parquet(HERITAGE_FILE, engine='pyarrow', compression='snappy')
+
+    # Buffer speichern
+    if l_res:
+        df_l = pd.concat(l_res)
+        if os.path.exists(BUFFER_FILE):
+            df_l = pd.concat([pd.read_parquet(BUFFER_FILE), df_l])
+        df_l.to_parquet(BUFFER_FILE, engine='pyarrow', compression='snappy')
+    
+    print(f"✅ Zyklus abgeschlossen. Heritage & Buffer synchronisiert.")
 
 if __name__ == "__main__":
-    main()
+    run_rapid_cycle()
