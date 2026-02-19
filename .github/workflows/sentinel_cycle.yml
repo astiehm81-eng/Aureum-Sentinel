@@ -1,15 +1,15 @@
-name: Aureum Sentinel V68 - Final Clean
+name: Aureum Sentinel V69 - Live & Heritage
 
 on:
   schedule:
-    - cron: '*/15 * * * *' # Alle 15 Min für maximale Sicherheit
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  sentinel_run:
+  run_sentinel:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -22,29 +22,18 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install
-        run: pip install pandas pandas-datareader pyarrow numpy
+      - name: Install Dependencies
+        run: pip install pandas pandas-datareader pyarrow yfinance numpy
 
-      - name: Execute
+      - name: Run Sentinel V69
         run: python sentinel_master.py
 
-      - name: Smart Sync & Deep Cleanup
+      - name: Sync & Cleanup
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
-          
-          # 1. Konflikte vermeiden
           git pull --rebase origin main
-          
-          # 2. ALTE DATEIEN AKTIV ENTFERNEN (Müllabfuhr)
-          git rm -f sentinel_*.csv sentinel_*.parquet vault_health.json || true
-          
-          # 3. Neue Daten hinzufügen
-          git add isin_pool.json
-          [ -f vault_status.txt ] && git add vault_status.txt
-          [ -d heritage_vault ] && git add heritage_vault/*.parquet
-          
-          # 4. Git Datenbank komprimieren
+          git rm -f sentinel_*.csv sentinel_*.parquet || true
+          git add isin_pool.json vault_status.txt heritage_vault/*.parquet
           git gc --prune=now --aggressive
-          
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Sentinel V68: Master Cleanup & Status Update" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "V69: Live-Ticker & Deep Sync [$(date)]" && git push)
