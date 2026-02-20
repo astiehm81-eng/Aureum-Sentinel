@@ -14,38 +14,38 @@ jobs:
       contents: write
     
     steps:
-      - name: 📥 Repository laden
+      - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: 🐍 Python Umgebung einrichten
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: 📦 Abhängigkeiten installieren
+      - name: Install Dependencies
         run: pip install pandas yfinance pyarrow fastparquet google-generativeai
 
-      - name: 🚀 PHASE 1: Markt-Wachstum (Finder)
+      - name: Phase 1 Growth Engine
         continue-on-error: true
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python aureum_gemini_finder.py
 
-      - name: 🛡️ PHASE 2: Archivierung & Live-Überwachung (Sentinel)
+      - name: Phase 2 Monitoring Engine
         run: python aureum_sentinel.py
 
-      - name: 💾 PHASE 3: Datenbank-Synchronisierung
+      - name: Phase 3 Data Sync
         if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel"
           git add heritage_vault/*.parquet anchors_memory.json vault_status.txt AUREUM_SNAPSHOT.txt isin_pool.json || true
-          git commit -m "Daten-Update [skip ci]" || echo "Keine Änderungen"
-          git push origin main || echo "Push fehlgeschlagen"
+          git commit -m "Automated Sync V109.2 [skip ci]" || echo "No changes"
+          git push origin main || echo "Push fail"
 
-      - name: 🔄 PHASE 4: Nächsten Zyklus triggern
+      - name: Phase 4 Re-Trigger Cycle
         if: success()
         run: |
           curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
