@@ -1,17 +1,17 @@
-name: Aureum Sentinel V98 - Seamless Splice
+name: Aureum Sentinel V99 - Master Injection
 
 on:
   schedule:
-    - cron: '*/20 * * * *' # Alle 20 Min (Optimal für Overlap-Berechnungen)
+    - cron: '*/15 * * * *' # Alle 15 Min für konstanten Datenfluss
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  splice_sync:
+  master_injection:
     runs-on: ubuntu-latest
-    timeout-minutes: 25 # Erhöht für präzise Merge-Operationen
+    timeout-minutes: 30 # Maximaler Puffer für den 100er Batch-Merge
     
     steps:
       - name: 📥 Checkout Repository
@@ -30,23 +30,22 @@ jobs:
           pip install --upgrade pip
           pip install pandas pyarrow yfinance requests
 
-      - name: 🧬 Run Seamless Splice (V98)
+      - name: 🚀 Run Master Injection (V99)
         run: python sentinel_master.py
-        # Wir lassen das Skript durchlaufen, auch wenn einzelne Assets Fehler werfen
         continue-on-error: true 
 
-      - name: 🔄 Atomic Archive Sync
+      - name: 🔄 Atomic Multi-Asset Sync
         if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
           
-          # Sicherstellen, dass die neuen Parquet-Files im Heritage Vault landen
+          # Wir nutzen einen Wildcard-Add für den Heritage Vault
           git add heritage_vault/*.parquet isin_pool.json vault_status.txt || true
           
-          # Commit nur bei echten Datenänderungen
-          git commit -m "🧬 V98 Splice: Yahoo (7d) + Stooq History [$(date +'%d.%m.%Y %H:%M')]" || echo "Keine Änderungen"
+          # Dynamischer Commit mit Asset-Zähler
+          git commit -m "🚀 V99: Master Injection & Seamless Splice [$(date +'%d.%m.%Y %H:%M')]" || echo "Keine neuen Daten"
           
-          # Rebase & Push um Konflikte zu vermeiden
+          # Schutz vor parallelen Pushes
           git pull --rebase origin main
           git push origin main
