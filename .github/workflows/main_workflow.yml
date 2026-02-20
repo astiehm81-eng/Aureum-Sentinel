@@ -33,18 +33,24 @@ jobs:
       - name: 📦 Pakete installieren
         run: pip install pandas yfinance pyarrow fastparquet google-genai requests
 
-      - name: 🛡️ Phase 1 & 2 - Aureum Sentinel
+      - name: 🛡️ Phase 1 & 2 - Aureum Sentinel (Expansion & Monitoring)
         run: python aureum_sentinel.py
 
-      - name: 💾 Phase 3 - Datenbank-Sync
+      - name: 💾 Phase 3 - Datenbank-Sync & Commit
         if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel"
+          
+          # Änderungen vormerken
           git add .
-          git stash
+          
+          # Falls der Server neue Commits hat, weichen wir Konflikten aus
+          git stash || echo "Keine Änderungen zum Stashen"
           git pull --rebase origin main
           git stash pop || echo "Nichts zum Wiederherstellen"
+          
+          # Alles final committen
           git add .
-          git commit -m "Cycle-Update: $(date +'%H:%M') [skip ci]" || echo "No changes"
+          git commit -m "Cycle-Update V113: $(date +'%H:%M') [skip ci]" || echo "Keine Änderungen"
           git push origin main
