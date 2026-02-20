@@ -1,4 +1,4 @@
-name: Aureum Sentinel V105.1 - Dual Engine & Integrity
+name: Aureum Sentinel V106 - Global Monolith Engine
 
 on:
   schedule:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  sentinel-run:
+  global-process:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     
@@ -17,7 +17,7 @@ jobs:
       - name: 📥 Repository laden
         uses: actions/checkout@v4
 
-      - name: 🐍 Python Umgebung einrichten
+      - name: 🐍 Python Umgebung (High Performance)
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
@@ -25,24 +25,23 @@ jobs:
       - name: 📦 Bibliotheken installieren
         run: pip install pandas pyarrow yfinance numpy
 
-      - name: 🛰️ Sentinel V105.1 Engine starten
+      - name: 🛰️ Sentinel V106 Global Scan
         env:
           PYTHONUNBUFFERED: 1
         run: python sentinel_master.py
 
-      - name: 🔐 Datensafe Synchronisieren
-        if: always()
+      - name: 💾 Checkpoint-Save & Sync
+        if: always() # Sichert Daten auch bei Teilabbruch/Timeout
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
           
-          # Sicherstellen, dass der Heritage-Ordner und Buffer erkannt werden
-          git add heritage_vault/*.parquet
-          git add current_buffer.parquet vault_status.txt isin_pool.json || true
+          # Sicherung der Monolithen und des Buffers
+          git add current_buffer.parquet heritage_vault/*.parquet vault_status.txt isin_pool.json || true
           
-          # Commit mit Zeitstempel für die Nachverfolgbarkeit
-          git commit -m "🛡️ V105.1: Integrity Check & Gap Healing [$(date +'%H:%M')]" || echo "Keine Änderungen zum Committen"
+          # Dynamischer Commit-Name für Transparenz
+          git commit -m "🌍 V106: Global Sync & Healing [$(date +'%H:%M')]" || echo "Keine neuen Daten"
           
-          # Rebase verhindert Konflikte, falls parallel am Repo gearbeitet wurde
+          # Rebase um Kollisionen bei massiven Datenmengen zu vermeiden
           git pull --rebase origin main
           git push origin main
