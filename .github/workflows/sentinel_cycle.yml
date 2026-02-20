@@ -1,9 +1,9 @@
-name: Aureum Sentinel V85 - Safe Search
+name: Aureum Sentinel V86 - Deep Scan
 
 on:
   schedule:
-    - cron: '*/10 * * * *'
-  workflow_dispatch:
+    - cron: '*/10 * * * *' # Alle 10 Minuten
+  workflow_dispatch: # Ermöglicht manuellen Start
 
 permissions:
   contents: write
@@ -11,6 +11,9 @@ permissions:
 jobs:
   run_sentinel:
     runs-on: ubuntu-latest
+    # Timeout auf 15 Min hochgesetzt, damit der Deep-Scan nicht abgewürgt wird
+    timeout-minutes: 15 
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,21 +22,27 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+          cache: 'pip' # Beschleunigt die Installation bei Folgeläufen
 
-      - name: Install
-        run: pip install pandas pyarrow yfinance requests
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pandas pyarrow yfinance requests
 
-      - name: Run V85
+      - name: Run V86 Master
         run: python sentinel_master.py
 
       - name: Atomic Sync
+        if: always() # Läuft auch, wenn das Skript Teilfehler hatte
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
           
-          # Sicherer Add: Verhindert Abbruch, falls Dateien nicht existieren
+          # Hinzufügen aller relevanten Dateien (auch wenn sie neu erstellt wurden)
           git add vault_status.txt ticker_mapping.json dead_assets.json heritage_vault/*.parquet || true
           
-          git commit -m "V85: Archive Update [$(date)]" || echo "No changes"
+          git commit -m "V86: Deep Scan Update [$(date)]" || echo "No changes to commit"
+          
+          # Sicherer Pull/Push Kreislauf
           git pull --rebase origin main
           git push origin main
