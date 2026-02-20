@@ -1,96 +1,54 @@
 import pandas as pd
 import yfinance as yf
-import os, json, time, glob
-import requests
-from io import StringIO
+import os, json, time, sys
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor
 
-# --- EISERNER STANDARD V99 (2k MASTER INJECTION) ---
-HERITAGE_DIR = "heritage_vault"
+# --- EISERNER STANDARD V99.2 (ANCHOR-POINT LOGIC) ---
 POOL_FILE = "isin_pool.json"
-HUMAN_REPORT = "vault_status.txt"
-MAX_WORKERS = 10 # Erhöht für massiven Rollout
+ANCHOR_THRESHOLD = 0.001  # 0,1% Bewegung
+RUNTIME_LIMIT = 3600      # Läuft 1 Stunde pro GitHub-Action
 
-def generate_2k_pool():
-    """Generiert die Master-Liste der 2000 wichtigsten Welt-Assets."""
-    # Basis: DAX, S&P 500, Nasdaq 100, EuroStoxx 50, Nikkei (Auszug)
-    # In der finalen V100 wird dies über einen Scraper vollautomatisiert
-    core_us = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "BRK-B", "V", "JPM"]
-    core_de = ["SAP.DE", "SIE.DE", "ALV.DE", "DTE.DE", "AIR.DE", "MBG.DE", "BMW.DE", "BAS.DE", "IFX.DE", "ENR.DE"]
-    core_eu = ["ASML.AS", "MC.PA", "NESN.SW", "NOVN.SW", "ROG.SW", "OR.PA", "TTE.PA", "SAN.PA"]
+def run_sentinel_ticker():
+    if not os.path.exists(POOL_FILE):
+        print("❌ Pool-Datei nicht gefunden.")
+        return
+
+    with open(POOL_FILE, 'r') as f:
+        pool = json.load(f)
+
+    # Speicher für die letzten Ankerpunkte (wird pro Lauf initialisiert)
+    anchors = {asset['symbol']: None for asset in pool[:50]} 
     
-    combined = core_us + core_de + core_eu
-    # Auffüllen mit generischen Top-Werten (Simulation für 2000er Batch)
-    # Hier setzen wir ISINs ein, wo bekannt
-    return [{"symbol": s, "isin": "PENDING"} for s in combined]
+    start_time = time.time()
+    print(f"🛡️ AUREUM SENTINEL AKTIV - Hard Refresh Mode (0,1% Anchor)")
+    print(f"📡 Filter für 'Statistical Noise' ist DEAKTIVIERT.", flush=True)
 
-def get_stooq_hist(symbol):
-    # Mapping: Stooq braucht für US oft keinen Suffix, für DE aber .TG oder .DE
-    st_ticker = symbol.lower().replace(".de", ".tg")
-    url = f"https://stooq.com/q/d/l/?s={st_ticker}&f=sdjopc&g=d"
-    try:
-        res = requests.get(url, timeout=10)
-        if res.status_code == 200 and len(res.text) > 100:
-            df = pd.read_csv(StringIO(res.text))
-            df['Date'] = pd.to_datetime(df['Date']).dt.strftime('%Y-%m-%d')
-            return df[['Date', 'Close']].rename(columns={'Close': 'Price_H'})
-    except: pass
-    return None
+    while (time.time() - start_time) < RUNTIME_LIMIT:
+        for asset in pool[:50]: # Fokus auf Top 50 für maximale Frequenz
+            symbol = asset['symbol']
+            try:
+                # Hard Refresh direkt von der Quelle (Yahoo als Proxy für Tradegate-Kurse)
+                ticker = yf.Ticker(symbol)
+                data = ticker.history(period="1d", interval="1m")
+                
+                if not data.empty:
+                    current_price = data['Close'].iloc[-1]
+                    last_anchor = anchors[symbol]
 
-def get_yahoo_live(symbol):
-    y_sym = symbol.split('.')[0] if ".US" in symbol else symbol
-    try:
-        df = yf.Ticker(y_sym).history(period="7d")
-        if not df.empty:
-            df = df.reset_index()
-            df['Date'] = pd.to_datetime(df['Date']).dt.tz_localize(None).dt.strftime('%Y-%m-%d')
-            return df[['Date', 'Close']].rename(columns={'Close': 'Price_L'})
-    except: pass
-    return None
-
-def process_v99(asset):
-    sym = asset['symbol']
-    hist = get_stooq_hist(sym)
-    live = get_yahoo_live(sym)
-    
-    if hist is not None:
-        if live is not None:
-            # Splicing: Yahoo (Live) gewinnt bei Überschneidung
-            df = pd.merge(hist, live, on='Date', how='outer').sort_values('Date')
-            df['Price'] = df['Price_L'].fillna(df['Price_H'])
-            df = df[['Date', 'Price']]
-        else:
-            df = hist.rename(columns={'Price_H': 'Price'})
-        
-        df['Ticker'] = sym
-        return df
-    return None
-
-def run_v99():
-    if not os.path.exists(HERITAGE_DIR): os.makedirs(HERITAGE_DIR)
-    
-    # Pool Hard-Reset für die 2000er Expansion
-    pool = generate_2k_pool()
-    with open(POOL_FILE, 'w') as f: json.dump(pool, f, indent=4)
-    
-    # Verarbeite die ersten 100 Assets in diesem Lauf
-    new_data = []
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
-        futures = [ex.submit(process_v99, a) for a in pool[:100]]
-        for f in futures:
-            res = f.result()
-            if res is not None: new_data.append(res)
-
-    if new_data:
-        for df in new_data:
-            ticker = df['Ticker'].iloc[0]
-            df.to_parquet(os.path.join(HERITAGE_DIR, f"asset_{ticker}.parquet"), index=False)
-
-    with open(HUMAN_REPORT, "w", encoding="utf-8") as f:
-        f.write(f"🛡️ AUREUM SENTINEL V99 - MASTER INJECTION\n")
-        f.write(f"📊 Verarbeitete Assets: {len(new_data)}\n")
-        f.write(f"✅ Splicing-Status: Seamless (Yahoo/Stooq)")
+                    if last_anchor is None:
+                        anchors[symbol] = current_price
+                        print(f"📍 INITIAL ANCHOR | {symbol}: {current_price:.4f}", flush=True)
+                    else:
+                        # Berechnung der Abweichung
+                        diff = abs(current_price - last_anchor) / last_anchor
+                        
+                        if diff >= ANCHOR_THRESHOLD:
+                            print(f"🚀 NEW ANCHOR POINT | {symbol}: {current_price:.4f} (Change: {diff*100:.2f}%)", flush=True)
+                            anchors[symbol] = current_price
+            except Exception as e:
+                pass # Silent skip für Stabilität
+            
+        time.sleep(2) # Kurze Pause vor dem nächsten Hard-Refresh Loop
 
 if __name__ == "__main__":
-    run_v99()
+    run_sentinel_ticker()
