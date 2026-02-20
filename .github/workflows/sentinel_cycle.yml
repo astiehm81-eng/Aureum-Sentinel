@@ -1,4 +1,4 @@
-name: Aureum Sentinel V103.4 - Live Ticker
+name: Aureum Sentinel V104 - Dual Engine Ticker
 
 on:
   schedule:
@@ -9,12 +9,10 @@ permissions:
   contents: write
 
 jobs:
-  ticker:
+  run-engines:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    
     steps:
-      - name: 📥 Checkout Repository
+      - name: 📥 Checkout
         uses: actions/checkout@v4
 
       - name: 🐍 Setup Python
@@ -25,18 +23,16 @@ jobs:
       - name: 📦 Install Requirements
         run: pip install pandas pyarrow yfinance
 
-      - name: 🛰️ Run 15-Min Cycle
-        env:
-          PYTHONUNBUFFERED: 1
+      - name: 🛰️ Run Dual-Engine (Live + Heritage)
         run: python sentinel_master.py
 
-      - name: 💾 Sync Buffer & Status
+      - name: 💾 Sync Engines
         if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
-          # Nur Buffer und Status sichern, um das Repo klein zu halten
-          git add current_buffer.parquet vault_status.txt || true
-          git commit -m "🩹 Buffer Sync [$(date +'%H:%M')]" || echo "No changes"
+          # Wir adden den Buffer UND den Heritage-Vault (falls Engine B Daten fand)
+          git add current_buffer.parquet heritage_vault/*.parquet vault_status.txt
+          git commit -m "🛰️ Dual-Engine Sync [$(date +'%H:%M')]" || echo "No changes"
           git pull --rebase origin main
           git push origin main
