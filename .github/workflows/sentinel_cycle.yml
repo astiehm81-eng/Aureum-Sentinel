@@ -1,4 +1,4 @@
-name: Aureum Sentinel V104 - Dual Engine Ticker
+name: Aureum Sentinel V105.1 - Dual Engine & Integrity
 
 on:
   schedule:
@@ -9,30 +9,40 @@ permissions:
   contents: write
 
 jobs:
-  run-engines:
+  sentinel-run:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
     steps:
-      - name: 📥 Checkout
+      - name: 📥 Repository laden
         uses: actions/checkout@v4
 
-      - name: 🐍 Setup Python
+      - name: 🐍 Python Umgebung einrichten
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: 📦 Install Requirements
-        run: pip install pandas pyarrow yfinance
+      - name: 📦 Bibliotheken installieren
+        run: pip install pandas pyarrow yfinance numpy
 
-      - name: 🛰️ Run Dual-Engine (Live + Heritage)
+      - name: 🛰️ Sentinel V105.1 Engine starten
+        env:
+          PYTHONUNBUFFERED: 1
         run: python sentinel_master.py
 
-      - name: 💾 Sync Engines
+      - name: 🔐 Datensafe Synchronisieren
         if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
-          # Wir adden den Buffer UND den Heritage-Vault (falls Engine B Daten fand)
-          git add current_buffer.parquet heritage_vault/*.parquet vault_status.txt
-          git commit -m "🛰️ Dual-Engine Sync [$(date +'%H:%M')]" || echo "No changes"
+          
+          # Sicherstellen, dass der Heritage-Ordner und Buffer erkannt werden
+          git add heritage_vault/*.parquet
+          git add current_buffer.parquet vault_status.txt isin_pool.json || true
+          
+          # Commit mit Zeitstempel für die Nachverfolgbarkeit
+          git commit -m "🛡️ V105.1: Integrity Check & Gap Healing [$(date +'%H:%M')]" || echo "Keine Änderungen zum Committen"
+          
+          # Rebase verhindert Konflikte, falls parallel am Repo gearbeitet wurde
           git pull --rebase origin main
           git push origin main
