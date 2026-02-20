@@ -1,19 +1,31 @@
 name: Aureum Sentinel Execution
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 jobs:
   run-sentinel:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-      - name: Dependencies
+      - name: Install Dependencies
         run: pip install pandas yfinance pyarrow requests fastparquet
-      - name: Execute
-        run: python aureum_sentinel.py
+      - name: Run Sentinel
+        run: |
+          # Setze Timeout nach 25 Min, damit Git Push noch Zeit hat
+          timeout 25m python aureum_sentinel.py || echo "Runtime reached"
+      - name: Secure Database Sync
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "Aureum Sentinel"
+          git pull --rebase origin main # Verhindert "Kaputtgehen" bei neuem Skript
+          git add heritage_vault/*.parquet anchors_memory.json vault_status.txt
+          git commit -m "Automated Self-Healing & Data Update [skip ci]" || echo "No changes"
+          git push
