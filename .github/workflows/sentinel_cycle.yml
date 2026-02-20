@@ -1,4 +1,4 @@
-name: Aureum Sentinel V80 - Gap Audit
+name: Aureum Sentinel V82 - Audit Sync
 
 on:
   schedule:
@@ -25,14 +25,22 @@ jobs:
       - name: Install
         run: pip install pandas pyarrow yfinance
 
-      - name: Run V80 Master
+      - name: Run V82 Master
         run: python sentinel_master.py
 
-      - name: Atomic Sync
+      - name: Force Push Updates
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
-          git add vault_status.txt missing_assets.json heritage_vault/*.parquet
-          git commit -m "V80: Gap Audit & Smart-Fill [$(date)]" || echo "No changes"
+          
+          # Sicherstellen, dass wir keine Reste haben
+          git add vault_status.txt dead_assets.json heritage_vault/*.parquet
+          
+          # Änderungen stashen, pullen, poppen (sicherster Weg gegen Konflikte)
+          git stash || echo "Nothing to stash"
           git pull --rebase origin main
+          git stash pop || echo "Nothing to pop"
+          
+          git add .
+          git commit -m "V82: Gap-Audit & Archive Refresh [$(date)]" || echo "No changes"
           git push origin main
