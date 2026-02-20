@@ -1,4 +1,5 @@
 name: Aureum Sentinel Perpetual Loop
+
 on:
   schedule:
     - cron: '*/20 * * * *'
@@ -11,39 +12,40 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Python Setup
+      - name: Setup Python environment
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: Dependencies
+      - name: Install dependencies
         run: pip install pandas yfinance pyarrow fastparquet google-generativeai
 
-      - name: Step 1: Growth Engine (Finder)
-        continue-on-error: true # Verhindert Abbruch, falls API-Key fehlt
+      - name: Step 1 - Growth Engine (Finder)
+        continue-on-error: true
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python aureum_gemini_finder.py
 
-      - name: Step 2: Monitoring Engine (Sentinel)
+      - name: Step 2 - Monitoring Engine (Sentinel)
         run: python aureum_sentinel.py
 
-      - name: Step 3: Secure Data Sync
-        if: always() # Läuft auch, wenn Sentinel wegen Timeout abbricht
+      - name: Step 3 - Data Sync and Commit
+        if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel"
           git add heritage_vault/*.parquet anchors_memory.json vault_status.txt AUREUM_SNAPSHOT.txt isin_pool.json || true
-          git commit -m "System-Update [skip ci]" || echo "No changes"
+          git commit -m "Automated Data Sync [skip ci]" || echo "No changes to commit"
           git push origin main || echo "Push failed"
 
-      - name: Step 4: Re-Trigger
+      - name: Step 4 - Trigger Next Cycle
         if: success()
         run: |
           curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
