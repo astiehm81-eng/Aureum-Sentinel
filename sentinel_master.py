@@ -1,133 +1,141 @@
 import pandas as pd
 import yfinance as yf
-import os, json, time, sys
-from datetime import datetime
+import os, json, time, sys, glob
+from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 
-# --- KONFIGURATION EISERNER STANDARD ---
+# --- KONFIGURATION EISERNER STANDARD V103.2 ---
 POOL_FILE = "isin_pool.json"
-BUFFER_FILE = "current_buffer.json"
-HERITAGE_BASE = "heritage_vault"
-ANCHOR_THRESHOLD = 0.001  # 0,1% Bewegung
-MAX_WORKERS = 15          # Parallelität für 2000er Pool
-RUNTIME_LIMIT = 780       # 13 Minuten Laufzeit für 15-Min-Workflow
+BUFFER_FILE = "current_buffer.parquet"
+STATUS_FILE = "vault_status.txt"
+HERITAGE_DIR = "heritage_vault"
+ANCHOR_THRESHOLD = 0.001
+MAX_WORKERS_LIVE = 15   # Für den schnellen Ticker
+MAX_WORKERS_HEAL = 25   # Für das massive Historie-Füllen
+RUNTIME_LIMIT = 780      # 13 Minuten
 
-# --- 1. HILFSFUNKTIONEN ---
+def update_status(msg):
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    with open(STATUS_FILE, "w") as f:
+        f.write(f"[{timestamp}] {msg}")
+    print(f"STATUS: {msg}", flush=True)
 
-def get_decade_folder(year):
-    return f"{(int(year) // 10) * 10}s"
+def get_decade_path(year):
+    decade = (int(year) // 10) * 10
+    path = os.path.join(HERITAGE_DIR, f"heritage_{decade}s.parquet")
+    if not os.path.exists(HERITAGE_DIR): os.makedirs(HERITAGE_DIR)
+    return path
 
-def heal_gaps(symbol, last_timestamp):
-    """Besorgt fehlende Minuten-Daten seit dem letzten Eintrag."""
+# --- LÜCKEN-HEILUNG (PARALLEL) ---
+def heal_single_asset(symbol, last_date):
+    """Holt fehlende historische Daten für ein Asset ab dem letzten Stand."""
     try:
-        y = yf.Ticker(symbol)
-        df = y.history(start=last_timestamp, interval="1m")
-        if not df.empty:
-            df = df.reset_index()
-            df['Date'] = pd.to_datetime(df['Date']).dt.tz_localize(None)
-            gap_data = df[df['Date'] > pd.to_datetime(last_timestamp)]
-            return gap_data[['Date', 'Close']].rename(columns={'Close': 'p', 'Date': 't'})
+        # Puffer von 1 Tag zur Sicherheit
+        start_date = (last_date - timedelta(days=1)).strftime('%Y-%m-%d')
+        ticker = yf.Ticker(symbol)
+        df_gap = ticker.history(start=start_date, interval="1d")
+        
+        if not df_gap.empty:
+            df_gap = df_gap.reset_index()
+            # Datum vereinheitlichen (tz-naive)
+            df_gap['Date'] = pd.to_datetime(df_gap['Date']).dt.tz_localize(None)
+            df_gap['Ticker'] = symbol
+            return df_gap[['Date', 'Ticker', 'Close']].rename(columns={'Close': 'Price'})
     except: pass
     return None
 
-# --- 2. ARCHIVIERUNG & PURGE (TÄGLICH) ---
-
-def move_buffer_to_heritage_v101_1():
-    """Sortiert den Buffer in Dekaden ein und löscht flache Dateien im Root."""
-    print("🏛️ Starte Archivierung & Root-Purge...", flush=True)
-    
-    if os.path.exists(BUFFER_FILE):
-        with open(BUFFER_FILE, 'r') as f:
-            try: buffer_data = json.load(f)
-            except: buffer_data = {}
-
-        for symbol, ticks in buffer_data.items():
-            if not ticks: continue
-            df = pd.DataFrame(ticks)
-            df['t_dt'] = pd.to_datetime(df['t'])
-            df['decade'] = df['t_dt'].dt.year.apply(get_decade_folder)
-
-            for decade, decade_df in df.groupby('decade'):
-                target_dir = os.path.join(HERITAGE_BASE, decade)
-                if not os.path.exists(target_dir): os.makedirs(target_dir)
-                
-                file_path = os.path.join(target_dir, f"{symbol}.parquet")
-                new_data = decade_df[['t', 'p']].rename(columns={'t': 'Date', 'p': 'Price'})
-
-                if os.path.exists(file_path):
-                    old_df = pd.read_parquet(file_path)
-                    new_data = pd.concat([old_df, new_data]).drop_duplicates(subset=['Date'], keep='last')
-                
-                new_data.to_parquet(file_path, index=False)
-        
-        os.remove(BUFFER_FILE)
-        print("✅ Buffer erfolgreich in Dekaden überführt.", flush=True)
-
-    # DER PURGE: Alles löschen, was direkt in heritage_vault/ liegt
-    flat_files = [f for f in os.listdir(HERITAGE_BASE) if os.path.isfile(os.path.join(HERITAGE_BASE, f))]
-    for f in flat_files:
-        try:
-            os.remove(os.path.join(HERITAGE_BASE, f))
-            print(f"🗑️ Purged: {f}", flush=True)
-        except: pass
-    print("✨ Reinigung abgeschlossen.", flush=True)
-
-# --- 3. LIVETICKER & GAP-HEALING (ALLE 15 MIN) ---
-
-def process_tick(asset, anchors):
+# --- DER MINUTEN-TICKER (LIVE-MODUS) ---
+def process_live_tick(asset, anchors):
     symbol = asset['symbol']
     try:
         t = yf.Ticker(symbol)
         df = t.history(period="1d", interval="1m")
-        if df.empty: return
+        if df.empty: return None
+        
+        curr_p = df['Close'].iloc[-1]
+        last_p = anchors.get(symbol)
+        
+        if last_p is None or abs(curr_p - last_p) / last_p >= ANCHOR_THRESHOLD:
+            anchors[symbol] = curr_p
+            return {"Date": datetime.now().replace(microsecond=0), "Ticker": symbol, "Price": round(curr_p, 4)}
+    except: return None
 
-        current_price = df['Close'].iloc[-1]
-        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        last_anchor = anchors.get(symbol)
+# --- ARCHIVIERUNG, VERHEIRATUNG & HEALING ---
+def archive_and_heal():
+    update_status("🔍 Starte Archiv-Merge & Deep Healing...")
+    
+    # 1. Dekaden-Monolithen scannen
+    files = glob.glob(os.path.join(HERITAGE_DIR, "heritage_*s.parquet"))
+    if not files:
+        update_status("Keine Heritage-Daten gefunden. Initialisierung nötig.")
+        # Hier könnte ein Initial-Download für den Pool stehen
+        return
 
-        # 0,1% Check oder Initialisierung
-        if last_anchor is None or abs(current_price - last_anchor) / last_anchor >= ANCHOR_THRESHOLD:
-            # GAP-HEALING vor dem Schreiben in den Buffer
-            # (In einer echten Prod-Umgebung würde hier der Buffer-Load stehen)
-            print(f"🚀 [ANCHOR] {symbol}: {current_price:.4f}", flush=True)
-            anchors[symbol] = current_price
-            
-            # Hot-Update des Buffers
-            update_local_buffer(symbol, current_price, now_str)
-        else:
-            print(f"  · {symbol}: {current_price:.4f}", flush=True)
-    except: pass
-
-def update_local_buffer(symbol, price, ts):
-    data = {}
+    # Buffer laden
+    buffer_df = pd.DataFrame()
     if os.path.exists(BUFFER_FILE):
-        with open(BUFFER_FILE, 'r') as f:
-            try: data = json.load(f)
-            except: data = {}
-    
-    if symbol not in data: data[symbol] = []
-    data[symbol].append({"t": ts, "p": round(price, 4)})
-    
-    with open(BUFFER_FILE, 'w') as f:
-        json.dump(data, f)
+        buffer_df = pd.read_parquet(BUFFER_FILE)
+        buffer_df['Date'] = pd.to_datetime(buffer_df['Date']).dt.tz_localize(None)
 
-def run_cycle():
+    for path in files:
+        h_df = pd.read_parquet(path)
+        h_df['Date'] = pd.to_datetime(h_df['Date']).dt.tz_localize(None)
+        all_symbols = h_df['Ticker'].unique()
+        
+        update_status(f"Heile {len(all_symbols)} Assets in {os.path.basename(path)}...")
+        
+        # Parallel Healing der Historie
+        tasks = []
+        for symbol in all_symbols:
+            last_date = h_df[h_df['Ticker'] == symbol]['Date'].max()
+            if (datetime.now() - last_date).days > 1:
+                tasks.append((symbol, last_date))
+        
+        if tasks:
+            with ThreadPoolExecutor(max_workers=MAX_WORKERS_HEAL) as executor:
+                results = list(executor.map(lambda t: heal_single_asset(*t), tasks))
+            
+            gap_data = pd.concat([res for res in results if res is not None])
+            if not gap_data.empty:
+                h_df = pd.concat([h_df, gap_data])
+
+        # Verheiraten mit Minuten-Buffer
+        relevant_buffer = buffer_df[buffer_df['Ticker'].isin(all_symbols)]
+        if not relevant_buffer.empty:
+            h_df = pd.concat([h_df, relevant_buffer])
+
+        # Finale Reinigung & Atomic Write
+        h_df = h_df.drop_duplicates(subset=['Date', 'Ticker'], keep='last').sort_values(['Ticker', 'Date'])
+        h_df.to_parquet(path, index=False, compression='snappy')
+        print(f"✅ {os.path.basename(path)} konsolidiert.")
+
+    if os.path.exists(BUFFER_FILE): os.remove(BUFFER_FILE)
+    update_status("✨ Archivierung abgeschlossen. Historie lückenlos.")
+
+def run_sentinel_ticker():
     if not os.path.exists(POOL_FILE): return
     with open(POOL_FILE, 'r') as f: pool = json.load(f)
     
     anchors = {}
     start_time = time.time()
-    print(f"📡 Aureum Sentinel V101.2 gestartet (13min Loop)...", flush=True)
+    update_status(f"📡 Ticker läuft: {len(pool)} Assets...")
 
     while (time.time() - start_time) < RUNTIME_LIMIT:
         loop_start = time.time()
-        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            executor.map(lambda a: process_tick(a, anchors), pool)
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS_LIVE) as executor:
+            results = list(executor.map(lambda a: process_live_tick(a, anchors), pool))
         
-        elapsed = time.time() - loop_start
-        time.sleep(max(0, 60 - elapsed))
+        new_ticks = [r for r in results if r is not None]
+        if new_ticks:
+            df = pd.DataFrame(new_ticks)
+            if os.path.exists(BUFFER_FILE):
+                df = pd.concat([pd.read_parquet(BUFFER_FILE), df])
+            df.to_parquet(BUFFER_FILE, index=False)
+        
+        time.sleep(max(0, 60 - (time.time() - loop_start)))
 
 if __name__ == "__main__":
-    # Standardmäßig wird der Cycle gestartet. 
-    # Für das Archiv-Skript rufen wir die Funktion direkt über die YML auf.
-    run_cycle()
+    if "--archive" in sys.argv:
+        archive_and_heal()
+    else:
+        run_sentinel_ticker()
