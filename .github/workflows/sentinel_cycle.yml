@@ -1,41 +1,27 @@
-name: Aureum Sentinel V101.2 - Live Ticker
+name: Aureum Sentinel V103.2 - Live Ticker
 
 on:
   schedule:
     - cron: '*/15 * * * *'
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   ticker:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    
+    permissions:
+      contents: write
     steps:
-      - name: 📥 Checkout
-        uses: actions/checkout@v4
-
-      - name: 🐍 Python Setup
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-
-      - name: 📦 Install
-        run: pip install pandas pyarrow yfinance requests
-
-      - name: 🛰️ Run Cycle
-        env:
-          PYTHONUNBUFFERED: 1
-        run: python sentinel_master.py
-
-      - name: 💾 Sync Buffer
+      - run: pip install pandas pyarrow yfinance
+      - run: python sentinel_master.py
+      - name: Sync Buffer
         if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
-          git add current_buffer.json vault_status.txt || true
+          git add current_buffer.parquet vault_status.txt || true
           git commit -m "🩹 Buffer Sync [$(date +'%H:%M')]" || echo "No changes"
-          git pull --rebase origin main
-          git push origin main
+          git push
