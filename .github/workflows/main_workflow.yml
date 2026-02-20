@@ -2,10 +2,13 @@ name: Aureum Sentinel Perpetual Loop
 
 on:
   schedule:
-    - cron: '*/20 * * * *'
-  workflow_dispatch:
-  repository_dispatch:
-    types: [next_cycle]
+    - cron: '*/20 * * * *' # Alle 20 Minuten (Gibt GitHub 5 Min Zeit zum Committen)
+  workflow_dispatch:      # Manueller Start erlaubt
+
+# WICHTIG: Stoppt sofortige Mehrfach-Runs
+concurrency:
+  group: sentinel-run
+  cancel-in-progress: false
 
 jobs:
   sentinel-cycle:
@@ -14,42 +17,35 @@ jobs:
       contents: write
     
     steps:
-      - name: Checkout Repository
+      - name: 📥 Repository laden
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Python
+      - name: 🐍 Python Setup
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11' # Upgrade auf 3.11 für bessere Performance
+          python-version: '3.11'
 
-      - name: Install Dependencies
+      - name: 📦 Pakete
         run: pip install pandas yfinance pyarrow fastparquet google-generativeai
 
-      - name: Phase 1 Growth Engine
+      - name: 🔍 Phase 1 - Finder (Wachstum)
         continue-on-error: true
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GOOGLE_API_KEY: ${{ secrets.GEMINI_API_KEY }} # Doppel-Zuweisung zur Sicherheit
+          GOOGLE_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python aureum_gemini_finder.py
 
-      - name: Phase 2 Monitoring Engine
+      - name: 🛡️ Phase 2 - Sentinel (15 Min Datensammlung)
         run: python aureum_sentinel.py
 
-      - name: Phase 3 Data Sync
+      - name: 💾 Phase 3 - Datenbank-Sync & Commit
         if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel"
-          git add heritage_vault/*.parquet anchors_memory.json vault_status.txt AUREUM_SNAPSHOT.txt isin_pool.json || true
-          git commit -m "System-Update V110.1 [skip ci]" || echo "No changes"
-          git push origin main || echo "Push fail"
-
-      - name: Phase 4 Re-Trigger Cycle
-        if: success()
-        run: |
-          curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          -H "Accept: application/vnd.github.v3+json" \
-          https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -d '{"event_type": "next_cycle"}'
+          git pull --rebase origin main
+          git add heritage_vault/*.parquet anchors_memory.json isin_pool.json || true
+          git commit -m "Cycle-Update: $(date +'%H:%M') [skip ci]" || echo "No changes"
+          git push origin main
