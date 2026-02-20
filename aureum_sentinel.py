@@ -14,65 +14,69 @@ POOL_FILE = "isin_pool.json"
 HERITAGE_DIR = "heritage_vault"
 BUFFER_FILE = os.path.join(HERITAGE_DIR, "live_buffer.parquet")
 ANCHOR_FILE = "anchors_memory.json"
-REPORT_FILE = "coverage_report.txt"
 
 # Strategie-Parameter
-ANCHOR_THRESHOLD = 0.0005  # 0,05% Anker
-PULSE_INTERVAL = 300       # Alle 5 Min
-TOTAL_RUNTIME = 900        # 15 Min Laufzeit
+ANCHOR_THRESHOLD = 0.0005 
+PULSE_INTERVAL = 300      
+TOTAL_RUNTIME = 900       
 MAX_WORKERS = 100          
 
 def log(tag, msg):
     ts = datetime.now().strftime('%H:%M:%S')
     print(f"[{ts}] [{tag}] {msg}", flush=True)
 
-# --- ENGINE 1: DER KI-FINDER (Expansion) ---
+# --- ENGINE 1: DER KI-FINDER (Optimiert für Free-Tier) ---
 def run_finder_parallel(api_key):
-    if not api_key:
-        log("FINDER", "❌ ERROR: Kein API-Key im Subprozess.")
-        return
     try:
         client = genai.Client(api_key=api_key)
         start_time = time.time()
-        # Segmente für die Rotation
-        segments = ["Global Mega-Caps", "Nasdaq 100", "DAX 40", "S&P 500 Tech", "Crypto Top 100"]
+        segments = ["Global Mega-Caps", "Nasdaq 100", "DAX 40", "S&P 500 Tech", "Crypto Top 50"]
         
-        while (time.time() - start_time) < (TOTAL_RUNTIME - 60):
-            seg = segments[int(time.time() / 60) % len(segments)]
-            log("FINDER", f"KI-Suche läuft: {seg}...")
+        while (time.time() - start_time) < (TOTAL_RUNTIME - 120):
+            seg = segments[int(time.time() / 120) % len(segments)]
+            log("FINDER", f"KI-Suche (Free-Tier): {seg}...")
             
-            prompt = f"Gib mir 250 Yahoo Finance Tickersymbole für {seg}. NUR JSON-Array: [{{'symbol': 'AAPL'}}, ...]"
-            response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+            # Kleinere Menge (50 statt 250), um 'Resource Exhausted' zu vermeiden
+            prompt = f"Gib mir 50 Yahoo Finance Tickersymbole für {seg}. Antwort NUR als JSON-Liste von Strings: ['AAPL', 'MSFT', ...]"
             
             try:
+                response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
                 raw_text = response.text.strip().replace("```json", "").replace("```", "")
-                new_data = json.loads(raw_text)
                 
-                if os.path.exists(POOL_FILE):
-                    with open(POOL_FILE, "r") as f: pool = json.load(f)
-                else: pool = []
+                # Flexiblere Logik für verschiedene Antwortformate
+                symbols_list = json.loads(raw_text)
+                if isinstance(symbols_list, list):
+                    if os.path.exists(POOL_FILE):
+                        with open(POOL_FILE, "r") as f: pool = json.load(f)
+                    else: pool = []
 
-                existing = {a['symbol'] for a in pool}
-                added = 0
-                for item in new_data:
-                    sym = str(item.get('symbol', '')).upper()
-                    if sym and sym not in existing:
-                        pool.append({"symbol": sym, "added_at": datetime.now().isoformat()})
-                        existing.add(sym)
-                        added += 1
+                    existing = {a['symbol'] for a in pool}
+                    added = 0
+                    for sym in symbols_list:
+                        s = str(sym).upper() if isinstance(sym, str) else str(sym.get('symbol', '')).upper()
+                        if s and s not in existing:
+                            pool.append({"symbol": s, "added_at": datetime.now().isoformat()})
+                            existing.add(s)
+                            added += 1
+                    
+                    if added > 0:
+                        with open(POOL_FILE, "w") as f: json.dump(pool, f, indent=4)
+                        log("FINDER", f"🚀 Pool +{added} Assets (Gesamt: {len(pool)})")
                 
-                if added > 0:
-                    with open(POOL_FILE, "w") as f:
-                        json.dump(pool, f, indent=4)
-                    log("FINDER", f"🚀 Pool-Wachstum: +{added} Assets (Gesamt: {len(pool)})")
-            except:
-                log("FINDER", "⚠️ JSON-Parsing fehlgeschlagen.")
-            
-            time.sleep(60) # Schont das API-Limit
+                # Wichtig: Lange Pause im Free Tier
+                time.sleep(120) 
+
+            except Exception as e:
+                if "429" in str(e):
+                    log("FINDER", "⏳ Limit erreicht (429). Warte 180s...")
+                    time.sleep(180)
+                else:
+                    log("FINDER", f"⚠️ Fehler: {str(e)[:50]}")
+                    time.sleep(60)
     except Exception as e:
-        log("FINDER", f"❌ API-Fehler: {str(e)[:50]}")
+        log("FINDER", f"❌ API-Kritisch: {str(e)[:50]}")
 
-# --- ENGINE 2: DER SENTINEL (Monitoring) ---
+# --- ENGINE 2: DER SENTINEL ---
 class AureumSentinel:
     def __init__(self):
         self.anchors = {}
@@ -89,7 +93,6 @@ class AureumSentinel:
             if not price:
                 df = t.history(period="1d")
                 if not df.empty: price = df['Close'].iloc[-1]
-            
             if price:
                 price = round(float(price), 4)
                 last = self.anchors.get(symbol)
@@ -100,7 +103,7 @@ class AureumSentinel:
         return None
 
     def run_cycle(self):
-        log("SENTINEL", "Monitoring gestartet.")
+        log("SENTINEL", "Monitoring aktiv.")
         start_run = time.time()
         while (time.time() - start_run) < TOTAL_RUNTIME:
             loop_start = time.time()
@@ -116,7 +119,6 @@ class AureumSentinel:
                     for f in as_completed(futures):
                         r = f.result()
                         if r: results.append(r)
-
                 if results:
                     df_new = pd.DataFrame(results)
                     if os.path.exists(BUFFER_FILE):
@@ -126,31 +128,23 @@ class AureumSentinel:
                         except: pass
                     df_new.to_parquet(BUFFER_FILE, index=False)
                     with open(ANCHOR_FILE, "w") as f: json.dump(self.anchors, f)
-                    log("SENTINEL", f"💾 {len(results)} Anker-Events gesichert.")
-
-            wait = max(10, PULSE_INTERVAL - (time.time() - loop_start))
+                    log("SENTINEL", f"💾 {len(results)} Anker gesichert.")
+            
+            elapsed = time.time() - loop_start
+            wait = max(10, PULSE_INTERVAL - elapsed)
             if (time.time() - start_run) + PULSE_INTERVAL > TOTAL_RUNTIME: break
             time.sleep(wait)
 
 if __name__ == "__main__":
-    # Key-Diagnose beim Start
-    k1 = os.getenv("GEMINI_API_KEY", "").strip()
-    k2 = os.getenv("GOOGLE_API_KEY", "").strip()
-    final_key = k1 if len(k1) > 10 else k2
+    k = os.getenv("GEMINI_API_KEY", "").strip() or os.getenv("GOOGLE_API_KEY", "").strip()
+    log("SYSTEM", f"=== START V118 (Stabil) === Key: {'✅' if len(k)>10 else '❌'}")
+    if len(k) < 10: sys.exit(1)
 
-    log("SYSTEM", "=== DIAGNOSE V117 ===")
-    log("SYSTEM", f"Key gefunden: {'✅' if len(final_key) > 10 else '❌'}")
-    
-    if len(final_key) < 10:
-        log("SYSTEM", "❌ FATAL: Kein gültiger API-Key in den Secrets gefunden.")
-        sys.exit(1)
-
-    finder_proc = multiprocessing.Process(target=run_finder_parallel, args=(final_key,))
+    finder_proc = multiprocessing.Process(target=run_finder_parallel, args=(k,))
     finder_proc.start()
-    
     try:
         AureumSentinel().run_cycle()
     finally:
         finder_proc.terminate()
         finder_proc.join()
-        log("SYSTEM", "Zyklus sauber beendet.")
+        log("SYSTEM", "Zyklus beendet.")
