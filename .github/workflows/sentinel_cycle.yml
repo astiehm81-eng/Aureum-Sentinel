@@ -1,8 +1,8 @@
-name: Aureum Sentinel V77 - NoFail
+name: Aureum Sentinel V78 - Final Sync
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/10 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -25,22 +25,25 @@ jobs:
       - name: Install
         run: pip install pandas pandas-datareader pyarrow yfinance numpy
 
-      - name: Run Sentinel V77
+      - name: Run V78
         run: python sentinel_master.py
 
-      - name: Atomic Git Push
+      - name: Atomic Push & Resolve
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
           
-          # 1. Alles für den Commit vormerken
+          # 1. Änderungen "verstauen" (Stash)
           git add isin_pool.json vault_status.txt heritage_vault/*.parquet
+          git stash
           
-          # 2. Commit erstellen (lokal)
-          git commit -m "V77: Stable Collection [$(date)]" || echo "No changes"
-          
-          # 3. Jetzt ziehen (Rebase ist jetzt sicher, da alles committet ist)
+          # 2. Repo auf den neuesten Stand bringen
           git pull --rebase origin main
           
-          # 4. Push
+          # 3. Änderungen wieder herausholen
+          git stash pop || echo "No conflicts"
+          
+          # 4. Jetzt final committen und hochladen
+          git add isin_pool.json vault_status.txt heritage_vault/*.parquet
+          git commit -m "V78: Reliable Collection [$(date)]" || echo "No changes"
           git push origin main
