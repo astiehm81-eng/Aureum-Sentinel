@@ -22,7 +22,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.11' # Upgrade auf 3.11 für bessere Performance
 
       - name: Install Dependencies
         run: pip install pandas yfinance pyarrow fastparquet google-generativeai
@@ -31,6 +31,7 @@ jobs:
         continue-on-error: true
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GEMINI_API_KEY }} # Doppel-Zuweisung zur Sicherheit
         run: python aureum_gemini_finder.py
 
       - name: Phase 2 Monitoring Engine
@@ -42,7 +43,7 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel"
           git add heritage_vault/*.parquet anchors_memory.json vault_status.txt AUREUM_SNAPSHOT.txt isin_pool.json || true
-          git commit -m "Automated Sync V109.2 [skip ci]" || echo "No changes"
+          git commit -m "System-Update V110.1 [skip ci]" || echo "No changes"
           git push origin main || echo "Push fail"
 
       - name: Phase 4 Re-Trigger Cycle
