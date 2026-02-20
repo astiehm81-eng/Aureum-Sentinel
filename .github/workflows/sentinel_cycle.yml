@@ -1,18 +1,17 @@
-name: Aureum Sentinel V100.6 - 15min Quick-Cycle
+name: Aureum Sentinel V101.1 - Archive & Purge
 
 on:
   schedule:
-    - cron: '*/15 * * * *' # Startet alle 15 Minuten (24/7)
-  workflow_dispatch:      # Manueller Start jederzeit möglich
+    - cron: '55 23 * * *' # Täglich kurz vor Mitternacht (UTC)
+  workflow_dispatch:      # Manueller Startknopf für sofortige Reinigung
 
 permissions:
   contents: write
 
 jobs:
-  quick_cycle_ticker:
+  archive_and_clean:
     runs-on: ubuntu-latest
-    timeout-minutes: 14 # Hard-Limit knapp unter dem Intervall
-
+    
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
@@ -24,21 +23,32 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: 📦 Install Requirements
+      - name: 📦 Install Financial Toolkit
         run: pip install pandas pyarrow yfinance requests
 
-      - name: 🛰️ Run Aureum Sentinel (15min Cycle)
+      - name: 🧹 Execute Purge & Restructure
+        run: |
+          # Wir rufen direkt die neue V101.1 Funktion auf
+          # Stelle sicher, dass move_buffer_to_heritage_v101_1() im Skript ist
+          python -c "from sentinel_master import move_buffer_to_heritage_v101_1; move_buffer_to_heritage_v101_1()"
         env:
           PYTHONUNBUFFERED: 1
-        run: python sentinel_master.py
-        # Skript läuft jetzt nur 13 Min, um Zeit für den Git-Push zu lassen
 
-      - name: 💾 Intermediate Buffer Sync
+      - name: 🏛️ Commit Structural Changes
         if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
-          git add current_buffer.json vault_status.txt || true
-          git commit -m "🩹 V100.6: 15min Cycle Sync & Gap-Fill [$(date +'%H:%M')]" || echo "Keine Änderungen"
+          
+          # Wir löschen die getrackten Dateien im Root aus dem Git-Index
+          # und fügen die neuen Dekaden-Ordner hinzu
+          git add heritage_vault/
+          git add current_buffer.json || true
+          
+          # Falls Dateien gelöscht wurden, muss Git das wissen (git add -A)
+          git add -A
+          
+          git commit -m "🏛️ V101.1: Decade Restructure & Root Purge Complete [$(date +'%d.%m.%Y')]" || echo "Keine Änderungen nötig"
+          
           git pull --rebase origin main
           git push origin main
