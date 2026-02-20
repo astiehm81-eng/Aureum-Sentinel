@@ -27,15 +27,11 @@ jobs:
           python-version: '3.11'
 
       - name: 📦 Pakete installieren
-        run: pip install pandas yfinance pyarrow fastparquet google-genai pandas_datareader
+        run: pip install pandas yfinance pyarrow fastparquet google-genai
 
-      - name: 🔍 Phase 1 - Finder (Wachstum)
-        continue-on-error: true
+      - name: 🛡️ Phase 1 & 2 - Aureum Multi-Process Execution
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python aureum_gemini_finder.py
-
-      - name: 🛡️ Phase 2 - Sentinel (Datensammlung & Self-Healing)
         run: python aureum_sentinel.py
 
       - name: 💾 Phase 3 - Datenbank-Sync & Commit
