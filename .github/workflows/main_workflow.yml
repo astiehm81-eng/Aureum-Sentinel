@@ -2,8 +2,8 @@ name: Aureum Sentinel Perpetual Loop
 
 on:
   schedule:
-    - cron: '*/20 * * * *' # Alle 20 Minuten
-  workflow_dispatch:      # Ermöglicht manuellen Start
+    - cron: '*/20 * * * *'
+  workflow_dispatch:
 
 concurrency:
   group: sentinel-run
@@ -29,10 +29,10 @@ jobs:
       - name: 📦 Pakete installieren
         run: pip install pandas yfinance pyarrow fastparquet google-genai requests
 
-      - name: 🛡️ Phase 1 & 2 - Aureum Sentinel (Parallel Execution)
+      - name: 🛡️ Phase 1 & 2 - Aureum Sentinel
         env:
+          # DIESE ZEILE IST ENTSCHEIDEND:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        # Unbuffered Output erzwingen, damit Logs sofort erscheinen
         run: python -u aureum_sentinel.py
 
       - name: 💾 Phase 3 - Datenbank-Sync & Commit
@@ -41,7 +41,6 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel"
           git pull --rebase origin main
-          # Alle relevanten Datenstufen sichern
           git add heritage_vault/*.parquet anchors_memory.json isin_pool.json coverage_report.txt || true
           git commit -m "Cycle-Update: $(date +'%H:%M') [skip ci]" || echo "No changes"
           git push origin main
