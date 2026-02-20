@@ -1,8 +1,8 @@
-name: Aureum Sentinel Perpetual Loop
+name: Aureum Sentinel Perpetual Sync
 
 on:
   schedule:
-    - cron: '*/20 * * * *'
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -10,24 +10,26 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    
     steps:
-      - name: 📥 Repository laden
+      - name: Checkout Code
         uses: actions/checkout@v4
-      - name: 🐍 Python Setup
+
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
-      - name: 📦 Pakete installieren
-        run: pip install pandas yfinance pyarrow fastparquet google-genai
-      - name: 🛡️ Aureum Sentinel V120
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python aureum_sentinel.py
-      - name: 💾 Datenbank-Sync (Ticker & Heritage)
-        if: always()
+          python-version: '3.10'
+
+      - name: Install Dependencies
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "Aureum Sentinel"
+          pip install pandas yfinance pyarrow fastparquet fastparquet[zstd]
+
+      - name: Run Aureum Sentinel
+        run: python aureum_sentinel.py
+
+      - name: Auto-Commit and Push Changes
+        run: |
+          git config --global user.name "Aureum-Sentinel-Bot"
+          git config --global user.email "sentinel@aureum.ai"
           git add .
-          git commit -m "Aureum V120: Decoupled Ticker & Heritage Vault [skip ci]" || echo "No changes"
-          git push origin main
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Sentinel Pulse: Heritage & Audit Sync" && git push)
