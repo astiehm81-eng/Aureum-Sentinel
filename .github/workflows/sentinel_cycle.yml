@@ -1,30 +1,49 @@
-name: Aureum Sentinel V106.4 - Secure Parallel Engine
+name: Aureum Sentinel V106.6 - Self-Evolving Parallel Engine
 
 on:
   schedule:
-    - cron: '*/15 * * * *'
-  workflow_dispatch:
+    - cron: '*/15 * * * *' # Alle 15 Minuten
+  workflow_dispatch:      # Manueller Start möglich
 
 permissions:
   contents: write
 
 jobs:
-  run-parallel:
+  run-goliath:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Wichtig für sauberes Rebase bei großen Datenmengen
+
+      - name: 🐍 Python Setup (High-Throughput)
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - run: pip install pandas pyarrow yfinance
-      - name: Launch Secure Sentinel
+
+      - name: 📦 Dependencies laden
+        run: pip install pandas pyarrow yfinance numpy
+
+      - name: 🛰️ Start V106.6 Self-Evolving Engine
+        env:
+          PYTHONUNBUFFERED: 1
         run: python sentinel_master.py
-      - name: Sync
-        if: always()
+
+      - name: 🏛️ Secure Data Sync (Live & Heritage)
+        if: always() # Sichert auch Teilergebnisse bei Timeouts
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
-          git add current_buffer.parquet heritage_vault/*.parquet vault_status.txt
-          git commit -m "💎 Secure Sync [$(date +'%H:%M')]" || echo "No changes"
+          
+          # Hinzufügen aller geänderten Parquet-Dateien (Heritage & Buffer)
+          git add current_buffer.parquet heritage_vault/*.parquet vault_status.txt isin_pool.json || true
+          
+          # Commit mit Zeitstempel
+          git commit -m "🧬 V106.6: Pulse Sync - Heritage Expansion [$(date +'%H:%M')]" || echo "Keine neuen Daten zum Sichern"
+          
+          # Rebase um Kollisionen zu vermeiden, falls das Archiv-Skript parallel lief
           git pull --rebase origin main
           git push origin main
