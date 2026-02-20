@@ -2,65 +2,55 @@ import google.generativeai as genai
 import json
 import os
 import yfinance as yf
+import sys
 from datetime import datetime
 
-# --- KONFIGURATION (V108.7) ---
-genai.configure(api_key="DEIN_GEMINI_API_KEY")
+# --- KONFIGURATION ---
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel('gemini-pro')
-
 POOL_FILE = "isin_pool.json"
 
-def update_status(msg):
-    print(f"🔍 [FINDER] {msg}", flush=True)
+def log(msg):
+    sys.stdout.write(f"🔍 [FINDER] {msg}\n")
+    sys.stdout.flush()
 
-def verify_ticker(symbol):
-    """Kurzcheck, ob der Ticker bei Yahoo Daten liefert."""
+def verify(symbol):
     try:
-        t = yf.Ticker(symbol)
-        return not t.history(period="1d").empty
+        return not yf.Ticker(symbol).history(period="1d").empty
     except: return False
 
 def search_massive():
-    """Systematische Suche für massives Pool-Wachstum."""
+    # Erweiterte Liste für echtes Wachstum
     queries = [
-        "S&P 500 Ticker Liste Yahoo",
-        "Nasdaq 100 Ticker Liste Yahoo",
-        "DAX, MDAX, SDAX Ticker Liste Yahoo",
-        "EuroStoxx 50 Ticker Liste Yahoo",
-        "FTSE 100 Ticker Liste Yahoo"
+        "S&P 500 Ticker Liste Yahoo", "Nasdaq 100 Ticker Liste Yahoo",
+        "DAX Performance Index Ticker", "MDAX Ticker Liste", "SDAX Ticker Liste",
+        "CAC 40 Ticker", "AEX Ticker", "IBEX 35 Ticker", "FTSE MIB Ticker"
     ]
-    
-    found_symbols = []
+    found = []
     for q in queries:
-        prompt = f"Liste mir alle Symbole für {q} auf. Antwort NUR als JSON-Array: [{{'symbol': '...'}}, ...]"
         try:
-            response = model.generate_content(prompt)
+            log(f"Suche nach: {q}")
+            response = model.generate_content(f"Liste Yahoo Ticker für {q}. NUR JSON: [{{'symbol': '...'}}]")
             data = json.loads(response.text.strip().replace("```json", "").replace("```", ""))
-            found_symbols.extend(data)
+            found.extend(data)
         except: continue
-    return found_symbols
+    return found
 
-def update_pool(new_assets):
+if __name__ == "__main__":
+    funde = search_massive()
     if os.path.exists(POOL_FILE):
         with open(POOL_FILE, "r") as f: pool = json.load(f)
     else: pool = []
     
     existing = {a['symbol'] for a in pool}
     added = 0
-    
-    for a in new_assets:
-        if a['symbol'] not in existing:
-            if verify_ticker(a['symbol']):
-                pool.append(a)
-                existing.add(a['symbol'])
-                added += 1
-                print(f"  + NEU ENTDECKT: {a['symbol']}", flush=True)
-                
+    for f in funde:
+        if f['symbol'] not in existing and verify(f['symbol']):
+            pool.append(f)
+            existing.add(f['symbol'])
+            added += 1
+            log(f"NEU: {f['symbol']}")
+
     with open(POOL_FILE, "w") as f:
         json.dump(pool, f, indent=4)
-    update_status(f"Pool wächst: +{added} neue Assets. Gesamtstand: {len(pool)}")
-
-if __name__ == "__main__":
-    print("--- FINDER AGENT START ---")
-    funde = search_massive()
-    update_pool(funde)
+    log(f"Wachstum abgeschlossen: +{added}. Gesamt: {len(pool)}")
