@@ -1,4 +1,4 @@
-name: Aureum Sentinel V84 - Universal Translator
+name: Aureum Sentinel V85 - Safe Search
 
 on:
   schedule:
@@ -14,8 +14,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -25,14 +23,17 @@ jobs:
       - name: Install
         run: pip install pandas pyarrow yfinance requests
 
-      - name: Run V84 Master
+      - name: Run V85
         run: python sentinel_master.py
 
       - name: Atomic Sync
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
-          git add vault_status.txt ticker_mapping.json dead_assets.json heritage_vault/*.parquet
-          git commit -m "V84: Mapping & Archive Update [$(date)]" || echo "No changes"
+          
+          # Sicherer Add: Verhindert Abbruch, falls Dateien nicht existieren
+          git add vault_status.txt ticker_mapping.json dead_assets.json heritage_vault/*.parquet || true
+          
+          git commit -m "V85: Archive Update [$(date)]" || echo "No changes"
           git pull --rebase origin main
           git push origin main
