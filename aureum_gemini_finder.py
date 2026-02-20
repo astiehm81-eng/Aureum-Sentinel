@@ -1,13 +1,22 @@
-import google.generativeai as genai
-import json
 import os
-import yfinance as yf
+import json
 import sys
+import yfinance as yf
 from datetime import datetime
+# Umstieg auf die neue, unterstützte Library
+import google.generativeai as genai 
 
-# --- KONFIGURATION V110 ---
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-model = genai.GenerativeModel('gemini-pro')
+# --- KONFIGURATION V110.1 ---
+# Wir nutzen eine robuste Abfrage für den Key
+api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+
+if not api_key:
+    sys.stdout.write("🔍 [FINDER] ERROR: Kein API_KEY gefunden. Bitte GitHub Secrets prüfen.\n")
+    sys.stdout.flush()
+    sys.exit(0)
+
+genai.configure(api_key=api_key)
+model = genai.GenerativeModel('gemini-1.5-flash') # Update auf stabileres Modell
 POOL_FILE = "isin_pool.json"
 
 def log(msg):
@@ -15,7 +24,6 @@ def log(msg):
     sys.stdout.flush()
 
 def get_market_segment():
-    """Wählt je nach aktueller Stunde ein anderes Marktsegment für die Suche."""
     hour = datetime.now().hour
     segments = [
         "S&P 500 & Nasdaq 100 Tech-Giganten",
@@ -39,8 +47,8 @@ def search_massive():
     
     try:
         response = model.generate_content(prompt)
-        # Säuberung des Outputs von Markdown-Blöcken
         text = response.text.strip()
+        # Robuste JSON-Extraktion
         if "```json" in text:
             text = text.split("```json")[1].split("```")[0]
         elif "```" in text:
@@ -48,12 +56,14 @@ def search_massive():
         
         return json.loads(text)
     except Exception as e:
-        log(f"Fehler bei Gemini-Abfrage: {e}")
+        log(f"Fehler bei Gemini-Abfrage: {str(e)[:100]}")
         return []
 
 def verify_and_update():
     new_found = search_massive()
-    if not new_found: return
+    if not new_found: 
+        log("Keine neuen Ticker von Gemini erhalten.")
+        return
 
     if os.path.exists(POOL_FILE):
         with open(POOL_FILE, "r") as f: pool = json.load(f)
@@ -65,7 +75,6 @@ def verify_and_update():
     for f in new_found:
         sym = f['symbol'].upper()
         if sym not in existing:
-            # Schneller Check, ob Ticker existiert
             try:
                 t = yf.Ticker(sym)
                 if not t.history(period="1d").empty:
@@ -77,7 +86,7 @@ def verify_and_update():
 
     with open(POOL_FILE, "w") as f:
         json.dump(pool, f, indent=4)
-    log(f"POOL-UPDATE: +{added} Assets. Gesamtbestand im Sentinel: {len(pool)}")
+    log(f"POOL-UPDATE: +{added} Assets. Gesamtbestand: {len(pool)}")
 
 if __name__ == "__main__":
     verify_and_update()
