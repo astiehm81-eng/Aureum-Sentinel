@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
+    
     steps:
       - name: 📥 Repository laden
         uses: actions/checkout@v4
@@ -30,7 +30,6 @@ jobs:
         run: pip install pandas yfinance pyarrow fastparquet google-genai requests
 
       - name: 🛡️ Phase 1 & 2 - Aureum Sentinel
-        # Hier injizieren wir die Secrets direkt als Umgebungsvariable für diesen Step
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GOOGLE_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -46,5 +45,5 @@ jobs:
           git pull --rebase origin main
           git stash pop || echo "No pop"
           git add .
-          git commit -m "Aureum Update V115 [skip ci]" || echo "No changes"
+          git commit -m "Aureum Update V117 [skip ci]" || echo "No changes"
           git push origin main
