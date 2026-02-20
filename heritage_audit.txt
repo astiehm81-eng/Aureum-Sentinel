@@ -1,13 +1,10 @@
-AUREUM SENTINEL AUDIT REPORT - 2026-02-20 23:05:32.831564
-========================================
-Gesamt-Assets im Archiv: 31
-
-DATEI-STATUS (HERITAGE):
-- heritage_1960s.parquet: 0.04 MB
-- heritage_1970s.parquet: 0.11 MB
-- heritage_1980s.parquet: 0.51 MB
-- heritage_1990s.parquet: 1.27 MB
-- heritage_2000s.parquet: 1.32 MB
-- heritage_2010s.parquet: 1.32 MB
-- heritage_2020s.parquet: 0.93 MB
+AUREUM SENTINEL AUDIT - 2026-02-20 23:41:16.240893
+Assets im System: 325
+- heritage_1960s.parquet: 0.15 MB
+- heritage_1970s.parquet: 0.36 MB
+- heritage_1980s.parquet: 1.21 MB
+- heritage_1990s.parquet: 2.07 MB
+- heritage_2000s.parquet: 3.20 MB
+- heritage_2010s.parquet: 3.32 MB
+- heritage_2020s.parquet: 2.36 MB
 - live_buffer.parquet: 0.02 MB
