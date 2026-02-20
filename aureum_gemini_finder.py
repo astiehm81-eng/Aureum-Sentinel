@@ -4,66 +4,63 @@ import os
 import yfinance as yf
 from datetime import datetime
 
-# --- KONFIGURATION (V108.6 FINDER-AGENT) ---
+# --- KONFIGURATION (V108.7) ---
 genai.configure(api_key="DEIN_GEMINI_API_KEY")
 model = genai.GenerativeModel('gemini-pro')
 
 POOL_FILE = "isin_pool.json"
-STATUS_FILE = "vault_status.txt"
 
 def update_status(msg):
-    timestamp = datetime.now().strftime('%H:%M:%S')
-    with open(STATUS_FILE, "a") as f:
-        f.write(f"[{timestamp}] [FINDER] {msg}\n")
-    print(f"🔍 {msg}", flush=True)
+    print(f"🔍 [FINDER] {msg}", flush=True)
 
 def verify_ticker(symbol):
+    """Kurzcheck, ob der Ticker bei Yahoo Daten liefert."""
     try:
         t = yf.Ticker(symbol)
-        info = t.history(period="1d")
-        if not info.empty:
-            print(f"  [VERIFIED] {symbol} ist aktiv.", flush=True)
-            return True
-        return False
-    except:
-        return False
+        return not t.history(period="1d").empty
+    except: return False
 
-def search_tickers_with_gemini(sector_query):
-    prompt = f"Erstelle eine Liste von Yahoo Finance Tickern für: {sector_query}. Antworte NUR im JSON-Format: [{{'symbol': 'TICKER'}}, ...]"
-    try:
-        response = model.generate_content(prompt)
-        raw_text = response.text.strip()
-        if "```json" in raw_text:
-            raw_text = raw_text.split("```json")[1].split("```")[0]
-        return json.loads(raw_text)
-    except Exception as e:
-        update_status(f"Gemini-Fehler: {e}")
-        return []
+def search_massive():
+    """Systematische Suche für massives Pool-Wachstum."""
+    queries = [
+        "S&P 500 Ticker Liste Yahoo",
+        "Nasdaq 100 Ticker Liste Yahoo",
+        "DAX, MDAX, SDAX Ticker Liste Yahoo",
+        "EuroStoxx 50 Ticker Liste Yahoo",
+        "FTSE 100 Ticker Liste Yahoo"
+    ]
+    
+    found_symbols = []
+    for q in queries:
+        prompt = f"Liste mir alle Symbole für {q} auf. Antwort NUR als JSON-Array: [{{'symbol': '...'}}, ...]"
+        try:
+            response = model.generate_content(prompt)
+            data = json.loads(response.text.strip().replace("```json", "").replace("```", ""))
+            found_symbols.extend(data)
+        except: continue
+    return found_symbols
 
-def update_isin_pool(new_assets):
+def update_pool(new_assets):
     if os.path.exists(POOL_FILE):
         with open(POOL_FILE, "r") as f: pool = json.load(f)
     else: pool = []
     
-    existing_symbols = {a['symbol'] for a in pool}
-    added_count = 0
-    print(f"Starte Verifizierung von {len(new_assets)} potenziellen Assets...", flush=True)
+    existing = {a['symbol'] for a in pool}
+    added = 0
     
-    for asset in new_assets:
-        sym = asset['symbol']
-        if sym not in existing_symbols:
-            if verify_ticker(sym):
-                pool.append(asset)
-                existing_symbols.add(sym)
-                added_count += 1
-    
+    for a in new_assets:
+        if a['symbol'] not in existing:
+            if verify_ticker(a['symbol']):
+                pool.append(a)
+                existing.add(a['symbol'])
+                added += 1
+                print(f"  + NEU ENTDECKT: {a['symbol']}", flush=True)
+                
     with open(POOL_FILE, "w") as f:
         json.dump(pool, f, indent=4)
-    update_status(f"Pool-Update: +{added_count} Assets. Gesamt: {len(pool)}")
+    update_status(f"Pool wächst: +{added} neue Assets. Gesamtstand: {len(pool)}")
 
 if __name__ == "__main__":
-    anfrage = "Top 100 Mid-Cap Unternehmen im MDAX und SDAX"
-    update_status(f"Suche läuft für: {anfrage}")
-    funde = search_tickers_with_gemini(anfrage)
-    if funde:
-        update_isin_pool(funde)
+    print("--- FINDER AGENT START ---")
+    funde = search_massive()
+    update_pool(funde)
