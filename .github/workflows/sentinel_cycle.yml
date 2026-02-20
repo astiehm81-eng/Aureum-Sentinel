@@ -1,4 +1,4 @@
-name: Aureum Sentinel V106.1 - Hybrid Goliath Engine
+name: Aureum Sentinel V106.4 - Secure Parallel Engine
 
 on:
   schedule:
@@ -9,36 +9,22 @@ permissions:
   contents: write
 
 jobs:
-  run-goliath:
+  run-parallel:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    
     steps:
-      - name: 📥 Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: 🐍 Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-
-      - name: 📦 Install Dependencies
-        run: pip install pandas pyarrow yfinance numpy
-
-      - name: 🛰️ Execute Goliath Engine (Live + Deep Fill)
-        env:
-          PYTHONUNBUFFERED: 1
+      - run: pip install pandas pyarrow yfinance
+      - name: Launch Secure Sentinel
         run: python sentinel_master.py
-
-      - name: 🏛️ Master Sync (Buffer & Heritage)
+      - name: Sync
         if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
-          
-          # Sicherung beider Datenströme
           git add current_buffer.parquet heritage_vault/*.parquet vault_status.txt
-          
-          git commit -m "🏛️ V106.1: Goliath Sync - Live Ticks & Deep Heritage Fill" || echo "No changes"
+          git commit -m "💎 Secure Sync [$(date +'%H:%M')]" || echo "No changes"
           git pull --rebase origin main
           git push origin main
