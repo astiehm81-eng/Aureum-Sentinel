@@ -16,43 +16,41 @@ BUFFER_FILE = os.path.join(HERITAGE_DIR, "live_buffer.parquet")
 ANCHOR_FILE = "anchors_memory.json"
 
 ANCHOR_THRESHOLD = 0.0005 
-PULSE_INTERVAL = 300      # Alle 5 Min Live-Check
-TOTAL_RUNTIME = 900       # 15 Min Gesamtlaufzeit pro GitHub-Run
+PULSE_INTERVAL = 300      
+TOTAL_RUNTIME = 900       
 MAX_WORKERS_SENTINEL = 100
 
 def log(tag, msg):
     ts = datetime.now().strftime('%H:%M:%S')
     print(f"[{ts}] [{tag}] {msg}", flush=True)
 
-# --- ENGINE 1: PARALLELER FINDER (GEMINI SCHNITTSTELLE) ---
-def run_finder_parallel(api_key):
-    """Sucht kontinuierlich nach neuen ISINs/Tickern via Gemini."""
-    if not api_key:
-        log("FINDER", "❌ ERROR: Kein API-Key erhalten.")
+# --- ENGINE 1: PARALLELER FINDER ---
+def run_finder_parallel(passed_key):
+    """Erhält den Key direkt als Argument beim Prozessstart."""
+    if not passed_key:
+        log("FINDER", "❌ ERROR: Injected API-Key is EMPTY.")
         return
 
     try:
-        client = genai.Client(api_key=api_key)
-        start_time = time.time()
+        client = genai.Client(api_key=passed_key)
+        # Test-Abfrage zur Validierung des Keys
+        client.models.generate_content(model="gemini-2.0-flash", contents="test")
+        log("FINDER", "✅ Key-Validierung erfolgreich. Starte Mining...")
         
-        # Segmente für die Rotation
-        segments = [
-            "S&P 500 Tech", "Nasdaq 100", "DAX 40 Bluechips", 
-            "Crypto Top 200", "EuroStoxx 600", "Nikkei 225",
-            "Rohstoffe (Oil/Gold/Copper) Mining Stocks"
-        ]
+        start_time = time.time()
+        segments = ["Global Mega-Caps", "Nasdaq 100", "DAX 40", "Crypto USD", "Commodities"]
         
         while (time.time() - start_time) < (TOTAL_RUNTIME - 60):
             seg = segments[int(time.time() / 60) % len(segments)]
-            log("FINDER", f"Mining neue Ticker für: {seg}...")
+            log("FINDER", f"Suche nach Assets in: {seg}...")
             
-            prompt = f"Gib mir 250 Yahoo Finance Tickersymbole für {seg}. Antwort NUR als JSON-Array: [{{'symbol': 'AAPL'}}, ...]"
-            
+            prompt = f"Gib mir 250 Yahoo Finance Tickersymbole für {seg}. Antwort NUR JSON-Array: [{{'symbol': 'AAPL'}}, ...]"
             response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
-            raw_text = response.text.strip().replace("```json", "").replace("```", "")
             
             try:
+                raw_text = response.text.strip().replace("```json", "").replace("```", "")
                 new_data = json.loads(raw_text)
+                
                 if os.path.exists(POOL_FILE):
                     with open(POOL_FILE, "r") as f: pool = json.load(f)
                 else: pool = []
@@ -70,16 +68,14 @@ def run_finder_parallel(api_key):
                     with open(POOL_FILE, "w") as f:
                         json.dump(pool, f, indent=4)
                     log("FINDER", f"🚀 Pool-Wachstum: +{added} Ticker (Gesamt: {len(pool)})")
-            except:
-                log("FINDER", "⚠️ Fehler beim JSON-Parsing der Gemini-Antwort.")
+            except Exception as e:
+                log("FINDER", f"⚠️ Parsing-Fehler: {str(e)[:50]}")
             
-            # Kurze Pause, um Rate-Limits der API zu schonen
             time.sleep(45)
-
     except Exception as e:
-        log("FINDER", f"❌ Kritischer Fehler im Finder: {str(e)[:100]}")
+        log("FINDER", f"❌ API-Fehler (Key ungültig?): {str(e)[:100]}")
 
-# --- ENGINE 2: SENTINEL (LIVE-PULS & ANKER) ---
+# --- ENGINE 2: SENTINEL ---
 class AureumSentinel:
     def __init__(self):
         self.anchors = {}
@@ -92,12 +88,10 @@ class AureumSentinel:
     def fetch_price(self, symbol):
         try:
             t = yf.Ticker(symbol)
-            # Schneller Check via fast_info
             price = t.fast_info.get('last_price')
             if not price:
                 df = t.history(period="1d")
                 if not df.empty: price = df['Close'].iloc[-1]
-            
             if price:
                 price = round(float(price), 4)
                 last = self.anchors.get(symbol)
@@ -108,13 +102,10 @@ class AureumSentinel:
         return None
 
     def run_sentinel_loop(self):
-        log("SENTINEL", "Live-Überwachung gestartet.")
+        log("SENTINEL", "Überwachung aktiv.")
         start_run = time.time()
-        
         while (time.time() - start_run) < TOTAL_RUNTIME:
             loop_start = time.time()
-            
-            # Pool bei jedem Puls neu laden, um Finder-Ergebnisse sofort zu nutzen
             if os.path.exists(POOL_FILE):
                 with open(POOL_FILE, "r") as f: pool = json.load(f)
             else: pool = []
@@ -137,29 +128,28 @@ class AureumSentinel:
                         except: pass
                     df_new.to_parquet(BUFFER_FILE, index=False)
                     with open(ANCHOR_FILE, "w") as f: json.dump(self.anchors, f)
-                    log("SENTINEL", f"💾 {len(results)} neue Anker-Events gesichert.")
+                    log("SENTINEL", f"💾 {len(results)} neue Anker gesichert.")
 
-            # Wartezeit bis zum nächsten 5-Minuten-Puls
             elapsed = time.time() - loop_start
             wait = max(10, PULSE_INTERVAL - elapsed)
-            if (time.time() - start_run) + PULSE_INTERVAL > TOTAL_RUNTIME:
-                log("SYSTEM", "Zyklus-Ende erreicht. Bereite Sync vor...")
-                break
+            if (time.time() - start_run) + PULSE_INTERVAL > TOTAL_RUNTIME: break
             time.sleep(wait)
 
 if __name__ == "__main__":
-    # Key sicher aus dem Environment extrahieren
-    active_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    # EXPLIZITES LADEN DES KEYS IM HAUPTPROZESS
+    key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     
-    # FINDER als separater Prozess starten
-    finder_proc = multiprocessing.Process(target=run_finder_parallel, args=(active_key,))
+    if not key:
+        log("SYSTEM", "❌ FATAL: Kein Key in Environment gefunden! Stoppe.")
+        sys.exit(1)
+
+    # Übergabe des Keys als Argument an den Finder-Prozess
+    finder_proc = multiprocessing.Process(target=run_finder_parallel, args=(key,))
     finder_proc.start()
     
     try:
-        # Hauptprozess führt den SENTINEL aus
         AureumSentinel().run_sentinel_loop()
     finally:
-        # Am Ende den Finder sauber beenden
         finder_proc.terminate()
         finder_proc.join()
-        log("SYSTEM", "Alle Prozesse beendet.")
+        log("SYSTEM", "Zyklus beendet.")
