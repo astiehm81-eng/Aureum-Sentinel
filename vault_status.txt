@@ -1,24 +1,6 @@
-🛡️ AUREUM SENTINEL V80 - STATUS
-📅 00:35:57
-===================================
-✅ Assets im Vault: 13
-❌ Total Fehlend:   10487
-⚠️ Unvollständig:   2
-📊 Abdeckung:       0.12%
-===================================
-🔎 TOP FEHLEND (Fahndungsliste):
-• AAPL.DE
-• MSFT.DE
-• ASML.DE
-• TSLA.DE
-• NVDA.DE
-• AMZN.DE
-• SAP.UK
-• ENR.UK
-• AAPL.UK
-• ASML.UK
-• NVDA.UK
-• SAP.JP
-• ENR.JP
-• AAPL.JP
-• MSFT.JP
+🛡️ AUREUM SENTINEL V82
+📅 00:44:27
+==============================
+📊 Abdeckung: 0.12%
+✅ Assets: 13
+💀 Blacklist: 60
