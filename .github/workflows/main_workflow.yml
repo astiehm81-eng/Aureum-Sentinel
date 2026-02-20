@@ -5,45 +5,29 @@ on:
     - cron: '*/20 * * * *'
   workflow_dispatch:
 
-concurrency:
-  group: sentinel-run
-  cancel-in-progress: false
-
 jobs:
   sentinel-cycle:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    
     steps:
       - name: 📥 Repository laden
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - name: 🐍 Python Setup
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-
       - name: 📦 Pakete installieren
-        run: pip install pandas yfinance pyarrow fastparquet google-genai requests
-
-      - name: 🛡️ Phase 1 & 2 - Aureum Sentinel
+        run: pip install pandas yfinance pyarrow fastparquet google-genai
+      - name: 🛡️ Aureum Sentinel V120
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GOOGLE_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python aureum_sentinel.py
-
-      - name: 💾 Phase 3 - Datenbank-Sync
+      - name: 💾 Datenbank-Sync (Ticker & Heritage)
         if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel"
           git add .
-          git stash || echo "No stash"
-          git pull --rebase origin main
-          git stash pop || echo "No pop"
-          git add .
-          git commit -m "Aureum Update V117 [skip ci]" || echo "No changes"
+          git commit -m "Aureum V120: Decoupled Ticker & Heritage Vault [skip ci]" || echo "No changes"
           git push origin main
