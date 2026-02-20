@@ -1,7 +1,9 @@
-AUREUM SENTINEL
-Abdeckung: 31
-<<<<<<< Updated upstream
-Stand: 2026-02-20 18:17:45.580403
-=======
-Stand: 2026-02-20 18:31:22.398527
->>>>>>> Stashed changes
+AUREUM SENTINEL - STATUS REPORT
+====================================
+Zeitstempel:     2026-02-20 20:41:30
+ISIN Pool Größe: 31
+Aktive Ticker:   31
+Anker im Vault:  5745
+Geheilte Lücken: 0
+System-Status:   Betriebsbereit (V125)
+====================================
