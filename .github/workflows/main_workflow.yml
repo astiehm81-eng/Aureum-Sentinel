@@ -36,15 +36,13 @@ jobs:
       - name: 🛡️ Phase 1 & 2 - Aureum Sentinel
         run: python aureum_sentinel.py
 
-      - name: 💾 Phase 3 - Datenbank-Sync & Commit
+      - name: 💾 Phase 3 - Datenbank-Sync
         if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel"
-          # WICHTIG: Erst adden, damit Git die Änderungen kennt
-          git add heritage_vault/*.parquet anchors_memory.json isin_pool.json coverage_report.txt || true
-          # Änderungen temporär parken, pullen und wiederholen (Stash-Pop)
-          git stash || echo "Nichts zum Stashen"
+          git add .
+          git stash
           git pull --rebase origin main
           git stash pop || echo "Nichts zum Wiederherstellen"
           git add .
