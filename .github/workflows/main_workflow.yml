@@ -15,6 +15,11 @@ jobs:
     permissions:
       contents: write
     
+    # Globales Environment für alle Steps in diesem Job
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GOOGLE_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
     steps:
       - name: 📥 Repository laden
         uses: actions/checkout@v4
@@ -30,8 +35,8 @@ jobs:
         run: pip install pandas yfinance pyarrow fastparquet google-genai requests
 
       - name: 🛡️ Phase 1 & 2 - Aureum Sentinel
+        # Hier noch einmal explizit gemappt
         env:
-          # DIESE ZEILE IST ENTSCHEIDEND:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python -u aureum_sentinel.py
 
