@@ -1,11 +1,9 @@
 name: Aureum Sentinel Perpetual Loop
 on:
   schedule:
-    # Startet alle 20 Minuten (Standard-Intervall)
     - cron: '*/20 * * * *'
   workflow_dispatch:
   repository_dispatch:
-    # Ermöglicht das sofortige Fortsetzen nach einem erfolgreichen Run
     types: [next_cycle]
 
 jobs:
@@ -26,24 +24,30 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install pandas yfinance pyarrow fastparquet
+          pip install pandas yfinance pyarrow fastparquet google-generativeai
 
-      - name: Run Sentinel Cycle (Max 15 Min)
+      - name: Step 1: Run Finder (Growth Engine)
+        # Sucht neue Assets und befüllt die isin_pool.json
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python aureum_gemini_finder.py
+
+      - name: Step 2: Run Sentinel (Monitoring Engine)
+        # Überwacht den (nun gewachsenen) Pool für 15 Minuten
         run: python aureum_sentinel.py
 
-      - name: Secure Data Sync & Snapshot
+      - name: Step 3: Secure Data Sync & Snapshot
+        # Speichert alle Fortschritte (neue ISINs, Anker, Heritage-Daten)
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel"
-          # Holen eventueller Änderungen während der Laufzeit
           git pull --rebase origin main
-          # Alle relevanten Datenbank- und Statusdateien hinzufügen
           git add heritage_vault/*.parquet anchors_memory.json vault_status.txt AUREUM_SNAPSHOT.txt isin_pool.json
-          # Commit nur wenn Änderungen vorhanden sind
-          git commit -m "Cycle-Update: Rohdaten & Snapshot [skip ci]" || echo "No changes to commit"
+          git commit -m "Cycle-Update: Pool +31 & Rohdaten [skip ci]" || echo "No changes"
           git push
 
-      - name: Auto Re-Trigger (Perpetual Loop)
+      - name: Step 4: Auto Re-Trigger
+        # Startet den nächsten Zyklus sofort
         run: |
           curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
           -H "Accept: application/vnd.github.v3+json" \
