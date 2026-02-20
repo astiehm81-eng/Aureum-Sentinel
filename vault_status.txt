@@ -1,4 +1,3 @@
-🛡️ AUREUM SENTINEL V93 - GLOBAL EXPANSION
-📊 Pool-Größe: 10500 Assets
-⚡ Letzter Live-Sync: 2026-02-20 01:21:08
-✅ Batch-Ergebnis: 0 Assets synchronisiert
+🛡️ AUREUM SENTINEL V95 - HERITAGE FUSION
+✅ Validierte Datenquellen: Yahoo Finance, Stooq
+📊 Letzter Sync: 2026-02-20 01:26:24
