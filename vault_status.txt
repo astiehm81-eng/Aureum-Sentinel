@@ -1,3 +1,3 @@
-🛡️ AUREUM SENTINEL V95 - HERITAGE FUSION
-✅ Validierte Datenquellen: Yahoo Finance, Stooq
-📊 Letzter Sync: 2026-02-20 01:26:24
+🛡️ AUREUM SENTINEL V98
+✅ Splice-Status: Yahoo (7d Overlap) + Stooq (Full Hist)
+⏱️ Letzter Batch-Abschluss: 01:33:57
