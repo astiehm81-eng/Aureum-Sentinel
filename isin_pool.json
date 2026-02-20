@@ -1,198 +1,82 @@
 [
-    {
-        "symbol": "AAPL",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "MSFT",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "NVDA",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "AMZN",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "GOOGL",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "META",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "TSLA",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "BRK-B",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "V",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "JPM",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "SAP.DE",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "SIE.DE",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "ALV.DE",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "DTE.DE",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "AIR.DE",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "MBG.DE",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "BMW.DE",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "BAS.DE",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "IFX.DE",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "ENR.DE",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "ASML.AS",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "MC.PA",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "NESN.SW",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "NOVN.SW",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "ROG.SW",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "OR.PA",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "TTE.PA",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "SAN.PA",
-        "isin": "PENDING"
-    },
-    {
-        "symbol": "GOOG",
-        "sector": "Auto-Expand"
-    },
-    {
-        "symbol": "LLY",
-        "sector": "Auto-Expand"
-    },
-    {
-        "symbol": "AVGO",
-        "sector": "Auto-Expand"
-    },
-    {"symbol": "ADBE", "isin": "PENDING"}, 
-    {"symbol": "AMD", "isin": "PENDING"},
-    {"symbol": "AMAT", "isin": "PENDING"}, 
-    {"symbol": "ADSK", "isin": "PENDING"},
-    {"symbol": "ADP", "isin": "PENDING"}, 
-    {"symbol": "ADI", "isin": "PENDING"},
-    {"symbol": "AMGN", "isin": "PENDING"}, 
-    {"symbol": "AXP", "isin": "PENDING"},
-    {"symbol": "BA", "isin": "PENDING"}, 
-    {"symbol": "BKNG", "isin": "PENDING"},
-    {"symbol": "CDNS", "isin": "PENDING"}, 
-    {"symbol": "CHTR", "isin": "PENDING"},
-    {"symbol": "CSCO", "isin": "PENDING"}, 
-    {"symbol": "CTAS", "isin": "PENDING"},
-    {"symbol": "COST", "isin": "PENDING"}, 
-    {"symbol": "CSX", "isin": "PENDING"},
-    {"symbol": "CRM", "isin": "PENDING"}, 
-    {"symbol": "DDOG", "isin": "PENDING"},
-    {"symbol": "DASH", "isin": "PENDING"}, 
-    {"symbol": "DXCM", "isin": "PENDING"},
-    {"symbol": "EA", "isin": "PENDING"}, 
-    {"symbol": "EBAY", "isin": "PENDING"},
-    {"symbol": "ENPH", "isin": "PENDING"}, 
-    {"symbol": "EXC", "isin": "PENDING"},
-    {"symbol": "FAST", "isin": "PENDING"}, 
-    {"symbol": "FTNT", "isin": "PENDING"},
-    {"symbol": "GE", "isin": "PENDING"}, 
-    {"symbol": "GILD", "isin": "PENDING"},
-    {"symbol": "HON", "isin": "PENDING"}, 
-    {"symbol": "IDXX", "isin": "PENDING"},
-    {"symbol": "ILMN", "isin": "PENDING"}, 
-    {"symbol": "INTC", "isin": "PENDING"},
-    {"symbol": "INTU", "isin": "PENDING"}, 
-    {"symbol": "ISRG", "isin": "PENDING"},
-    {"symbol": "JD", "isin": "PENDING"}, 
-    {"symbol": "KDP", "isin": "PENDING"},
-    {"symbol": "KLAC", "isin": "PENDING"}, 
-    {"symbol": "KHC", "isin": "PENDING"},
-    {"symbol": "LRCX", "isin": "PENDING"}, 
-    {"symbol": "LCID", "isin": "PENDING"},
-    {"symbol": "LULU", "isin": "PENDING"}, 
-    {"symbol": "MAR", "isin": "PENDING"},
-    {"symbol": "MCHP", "isin": "PENDING"}, 
-    {"symbol": "MDLZ", "isin": "PENDING"},
-    {"symbol": "MELI", "isin": "PENDING"}, 
-    {"symbol": "MNST", "isin": "PENDING"},
-    {"symbol": "MRNA", "isin": "PENDING"}, 
-    {"symbol": "MU", "isin": "PENDING"},
-    {"symbol": "NFLX", "isin": "PENDING"}, 
-    {"symbol": "NXPI", "isin": "PENDING"},
-    {"symbol": "ORLY", "isin": "PENDING"}, 
-    {"symbol": "PANW", "isin": "PENDING"},
-    {"symbol": "PAYX", "isin": "PENDING"}, 
-    {"symbol": "PYPL", "isin": "PENDING"},
-    {"symbol": "PDD", "isin": "PENDING"}, 
-    {"symbol": "PEP", "isin": "PENDING"},
-    {"symbol": "QCOM", "isin": "PENDING"}, 
-    {"symbol": "REGN", "isin": "PENDING"},
-    {"symbol": "ROST", "isin": "PENDING"}, 
-    {"symbol": "SBUX", "isin": "PENDING"},
-    {"symbol": "SIRI", "isin": "PENDING"}, 
-    {"symbol": "SNPS", "isin": "PENDING"},
-    {"symbol": "TEAM", "isin": "PENDING"}, 
-    {"symbol": "TMUS", "isin": "PENDING"},
-    {"symbol": "TXN", "isin": "PENDING"}, 
-    {"symbol": "VRSK", "isin": "PENDING"},
-    {"symbol": "VRTX", "isin": "PENDING"}, 
-    {"symbol": "WBA", "isin": "PENDING"},
-    {"symbol": "WDAY", "isin": "PENDING"}, 
-    {"symbol": "XEL", "isin": "PENDING"},
-    {"symbol": "ZM", "isin": "PENDING"}, 
-    {"symbol": "ZS", "isin": "PENDING"}
+    {"symbol": "AAPL", "isin": "PENDING"}, {"symbol": "MSFT", "isin": "PENDING"},
+    {"symbol": "NVDA", "isin": "PENDING"}, {"symbol": "AMZN", "isin": "PENDING"},
+    {"symbol": "GOOGL", "isin": "PENDING"}, {"symbol": "META", "isin": "PENDING"},
+    {"symbol": "TSLA", "isin": "PENDING"}, {"symbol": "BRK-B", "isin": "PENDING"},
+    {"symbol": "V", "isin": "PENDING"}, {"symbol": "JPM", "isin": "PENDING"},
+    {"symbol": "SAP.DE", "isin": "PENDING"}, {"symbol": "SIE.DE", "isin": "PENDING"},
+    {"symbol": "ALV.DE", "isin": "PENDING"}, {"symbol": "DTE.DE", "isin": "PENDING"},
+    {"symbol": "AIR.DE", "isin": "PENDING"}, {"symbol": "MBG.DE", "isin": "PENDING"},
+    {"symbol": "BMW.DE", "isin": "PENDING"}, {"symbol": "BAS.DE", "isin": "PENDING"},
+    {"symbol": "IFX.DE", "isin": "PENDING"}, {"symbol": "ENR.DE", "isin": "PENDING"},
+    {"symbol": "ASML.AS", "isin": "PENDING"}, {"symbol": "MC.PA", "isin": "PENDING"},
+    {"symbol": "NESN.SW", "isin": "PENDING"}, {"symbol": "NOVN.SW", "isin": "PENDING"},
+    {"symbol": "ROG.SW", "isin": "PENDING"}, {"symbol": "OR.PA", "isin": "PENDING"},
+    {"symbol": "TTE.PA", "isin": "PENDING"}, {"symbol": "SAN.PA", "isin": "PENDING"},
+    {"symbol": "ADBE", "isin": "PENDING"}, {"symbol": "AMD", "isin": "PENDING"},
+    {"symbol": "AMAT", "isin": "PENDING"}, {"symbol": "CRM", "isin": "PENDING"},
+    {"symbol": "NFLX", "isin": "PENDING"}, {"symbol": "QCOM", "isin": "PENDING"},
+    {"symbol": "TXN", "isin": "PENDING"}, {"symbol": "INTC", "isin": "PENDING"},
+    {"symbol": "COST", "isin": "PENDING"}, {"symbol": "PEP", "isin": "PENDING"},
+    {"symbol": "KO", "isin": "PENDING"}, {"symbol": "WMT", "isin": "PENDING"},
+    {"symbol": "PG", "isin": "PENDING"}, {"symbol": "NKE", "isin": "PENDING"},
+    {"symbol": "DIS", "isin": "PENDING"}, {"symbol": "MCD", "isin": "PENDING"},
+    {"symbol": "NVO", "isin": "PENDING"}, {"symbol": "LLY", "isin": "PENDING"},
+    {"symbol": "PFE", "isin": "PENDING"}, {"symbol": "MRK", "isin": "PENDING"},
+    {"symbol": "UNH", "isin": "PENDING"}, {"symbol": "GS", "isin": "PENDING"},
+    {"symbol": "MS", "isin": "PENDING"}, {"symbol": "BAC", "isin": "PENDING"},
+    {"symbol": "HSBC", "isin": "PENDING"}, {"symbol": "RY", "isin": "PENDING"},
+    {"symbol": "LIN", "isin": "PENDING"}, {"symbol": "RIO", "isin": "PENDING"},
+    {"symbol": "BHP", "isin": "PENDING"}, {"symbol": "SHEL", "isin": "PENDING"},
+    {"symbol": "BP", "isin": "PENDING"}, {"symbol": "XOM", "isin": "PENDING"},
+    {"symbol": "CVX", "isin": "PENDING"}, {"symbol": "CAT", "isin": "PENDING"},
+    {"symbol": "DE", "isin": "PENDING"}, {"symbol": "HON", "isin": "PENDING"},
+    {"symbol": "GE", "isin": "PENDING"}, {"symbol": "RTX", "isin": "PENDING"},
+    {"symbol": "LMT", "isin": "PENDING"}, {"symbol": "BA", "isin": "PENDING"},
+    {"symbol": "UPS", "isin": "PENDING"}, {"symbol": "FDX", "isin": "PENDING"},
+    {"symbol": "SBUX", "isin": "PENDING"}, {"symbol": "ABNB", "isin": "PENDING"},
+    {"symbol": "BKNG", "isin": "PENDING"}, {"symbol": "UBER", "isin": "PENDING"},
+    {"symbol": "PANW", "isin": "PENDING"}, {"symbol": "SNOW", "isin": "PENDING"},
+    {"symbol": "PLTR", "isin": "PENDING"}, {"symbol": "AVGO", "isin": "PENDING"},
+    {"symbol": "MU", "isin": "PENDING"}, {"symbol": "LRCX", "isin": "PENDING"},
+    {"symbol": "MCHP", "isin": "PENDING"}, {"symbol": "ON", "isin": "PENDING"},
+    {"symbol": "ADI", "isin": "PENDING"}, {"symbol": "ANET", "isin": "PENDING"},
+    {"symbol": "VRTX", "isin": "PENDING"}, {"symbol": "REGN", "isin": "PENDING"},
+    {"symbol": "ISRG", "isin": "PENDING"}, {"symbol": "SYK", "isin": "PENDING"},
+    {"symbol": "BSX", "isin": "PENDING"}, {"symbol": "MDT", "isin": "PENDING"},
+    {"symbol": "ZTS", "isin": "PENDING"}, {"symbol": "IDXX", "isin": "PENDING"},
+    {"symbol": "VRSK", "isin": "PENDING"}, {"symbol": "SPGI", "isin": "PENDING"},
+    {"symbol": "MSCI", "isin": "PENDING"}, {"symbol": "AXP", "isin": "PENDING"},
+    {"symbol": "BLK", "isin": "PENDING"}, {"symbol": "C", "isin": "PENDING"},
+    {"symbol": "CB", "isin": "PENDING"}, {"symbol": "MMC", "isin": "PENDING"},
+    {"symbol": "ADP", "isin": "PENDING"}, {"symbol": "PAYX", "isin": "PENDING"},
+    {"symbol": "INTU", "isin": "PENDING"}, {"symbol": "ORCL", "isin": "PENDING"},
+    {"symbol": "IBM", "isin": "PENDING"}, {"symbol": "NOW", "isin": "PENDING"},
+    {"symbol": "WDAY", "isin": "PENDING"}, {"symbol": "CDNS", "isin": "PENDING"},
+    {"symbol": "SNPS", "isin": "PENDING"}, {"symbol": "ADSK", "isin": "PENDING"},
+    {"symbol": "TEAM", "isin": "PENDING"}, {"symbol": "DDOG", "isin": "PENDING"},
+    {"symbol": "ZS", "isin": "PENDING"}, {"symbol": "CRWD", "isin": "PENDING"},
+    {"symbol": "NET", "isin": "PENDING"}, {"symbol": "OKTA", "isin": "PENDING"},
+    {"symbol": "MDB", "isin": "PENDING"}, {"symbol": "PYPL", "isin": "PENDING"},
+    {"symbol": "SQ", "isin": "PENDING"}, {"symbol": "SHOP", "isin": "PENDING"},
+    {"symbol": "T", "isin": "PENDING"}, {"symbol": "VZ", "isin": "PENDING"},
+    {"symbol": "TMUS", "isin": "PENDING"}, {"symbol": "CMCSA", "isin": "PENDING"},
+    {"symbol": "CHTR", "isin": "PENDING"}, {"symbol": "NFLX", "isin": "PENDING"},
+    {"symbol": "LYV", "isin": "PENDING"}, {"symbol": "MAR", "isin": "PENDING"},
+    {"symbol": "HLT", "isin": "PENDING"}, {"symbol": "TJX", "isin": "PENDING"},
+    {"symbol": "ROST", "isin": "PENDING"}, {"symbol": "LULU", "isin": "PENDING"},
+    {"symbol": "MDLZ", "isin": "PENDING"}, {"symbol": "KHC", "isin": "PENDING"},
+    {"symbol": "GIS", "isin": "PENDING"}, {"symbol": "K", "isin": "PENDING"},
+    {"symbol": "EL", "isin": "PENDING"}, {"symbol": "CL", "isin": "PENDING"},
+    {"symbol": "HALE.L", "isin": "PENDING"}, {"symbol": "UL", "isin": "PENDING"},
+    {"symbol": "RELY.PA", "isin": "PENDING"}, {"symbol": "RMS.PA", "isin": "PENDING"},
+    {"symbol": "KER.PA", "isin": "PENDING"}, {"symbol": "PRX.AS", "isin": "PENDING"},
+    {"symbol": "HEI.DE", "isin": "PENDING"}, {"symbol": "MUV2.DE", "isin": "PENDING"},
+    {"symbol": "VOW3.DE", "isin": "PENDING"}, {"symbol": "PAH3.DE", "isin": "PENDING"},
+    {"symbol": "DTG.DE", "isin": "PENDING"}, {"symbol": "CON.DE", "isin": "PENDING"},
+    {"symbol": "RWE.DE", "isin": "PENDING"}, {"symbol": "EON.DE", "isin": "PENDING"},
+    {"symbol": "BNR.DE", "isin": "PENDING"}, {"symbol": "BEI.DE", "isin": "PENDING"},
+    {"symbol": "HEN3.DE", "isin": "PENDING"}, {"symbol": "SY1.DE", "isin": "PENDING"},
+    {"symbol": "FRE.DE", "isin": "PENDING"}, {"symbol": "FME.DE", "isin": "PENDING"},
+    {"symbol": "MTX.DE", "isin": "PENDING"}, {"symbol": "RHM.DE", "isin": "PENDING"}
 ]
