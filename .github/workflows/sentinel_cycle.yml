@@ -1,19 +1,18 @@
-name: Aureum Sentinel V100 - Hard-Refresh Live
+name: Aureum Sentinel V100.6 - 15min Quick-Cycle
 
 on:
   schedule:
-    - cron: '0 */2 * * *' # Startet alle 2 Stunden neu
-  workflow_dispatch:      # Manueller Start für sofortigen Liveticker
+    - cron: '*/15 * * * *' # Startet alle 15 Minuten (24/7)
+  workflow_dispatch:      # Manueller Start jederzeit möglich
 
 permissions:
   contents: write
 
 jobs:
-  hard_refresh_ticker:
+  quick_cycle_ticker:
     runs-on: ubuntu-latest
-    # Wir geben dem Job 125 Minuten (2 Stunden Ticker + 5 Min Sync-Zeit)
-    timeout-minutes: 125 
-    
+    timeout-minutes: 14 # Hard-Limit knapp unter dem Intervall
+
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
@@ -24,30 +23,22 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          cache: 'pip'
 
       - name: 📦 Install Requirements
-        run: |
-          pip install --upgrade pip
-          pip install pandas pyarrow yfinance requests
+        run: pip install pandas pyarrow yfinance requests
 
-      - name: 🛰️ Run Aureum Sentinel (Hard-Refresh Mode)
-        # Wir setzen PYTHONUNBUFFERED=1, damit du die Ticks ECHTZEIT im GitHub Log siehst
+      - name: 🛰️ Run Aureum Sentinel (15min Cycle)
         env:
           PYTHONUNBUFFERED: 1
         run: python sentinel_master.py
-        continue-on-error: true 
+        # Skript läuft jetzt nur 13 Min, um Zeit für den Git-Push zu lassen
 
-      - name: 💾 Final Heritage Vault Sync
+      - name: 💾 Intermediate Buffer Sync
         if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
-          
-          # Archivieren der während des Laufs gefestigten Ankerpunkte
-          git add heritage_vault/*.parquet vault_status.txt || true
-          
-          git commit -m "🛡️ Aureum Sentinel: 2h Hard-Refresh Cycle Complete [$(date +'%d.%m.%Y %H:%M')]" || echo "Keine signifikanten Änderungen"
-          
+          git add current_buffer.json vault_status.txt || true
+          git commit -m "🩹 V100.6: 15min Cycle Sync & Gap-Fill [$(date +'%H:%M')]" || echo "Keine Änderungen"
           git pull --rebase origin main
           git push origin main
