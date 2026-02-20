@@ -1,4 +1,4 @@
-name: Aureum Sentinel V106 - Global Monolith Engine
+name: Aureum Sentinel V106.1 - Hybrid Goliath Engine
 
 on:
   schedule:
@@ -9,39 +9,36 @@ permissions:
   contents: write
 
 jobs:
-  global-process:
+  run-goliath:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     
     steps:
-      - name: 📥 Repository laden
+      - name: 📥 Checkout Repository
         uses: actions/checkout@v4
 
-      - name: 🐍 Python Umgebung (High Performance)
+      - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: 📦 Bibliotheken installieren
+      - name: 📦 Install Dependencies
         run: pip install pandas pyarrow yfinance numpy
 
-      - name: 🛰️ Sentinel V106 Global Scan
+      - name: 🛰️ Execute Goliath Engine (Live + Deep Fill)
         env:
           PYTHONUNBUFFERED: 1
         run: python sentinel_master.py
 
-      - name: 💾 Checkpoint-Save & Sync
-        if: always() # Sichert Daten auch bei Teilabbruch/Timeout
+      - name: 🏛️ Master Sync (Buffer & Heritage)
+        if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
           
-          # Sicherung der Monolithen und des Buffers
-          git add current_buffer.parquet heritage_vault/*.parquet vault_status.txt isin_pool.json || true
+          # Sicherung beider Datenströme
+          git add current_buffer.parquet heritage_vault/*.parquet vault_status.txt
           
-          # Dynamischer Commit-Name für Transparenz
-          git commit -m "🌍 V106: Global Sync & Healing [$(date +'%H:%M')]" || echo "Keine neuen Daten"
-          
-          # Rebase um Kollisionen bei massiven Datenmengen zu vermeiden
+          git commit -m "🏛️ V106.1: Goliath Sync - Live Ticks & Deep Heritage Fill" || echo "No changes"
           git pull --rebase origin main
           git push origin main
