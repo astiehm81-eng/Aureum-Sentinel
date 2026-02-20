@@ -1,8 +1,8 @@
-name: Aureum Sentinel V74 - Force Sync
+name: Aureum Sentinel V76 - Reliable
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/5 * * * *' # Alle 5 Min für maximale Kontinuität
   workflow_dispatch:
 
 permissions:
@@ -25,22 +25,19 @@ jobs:
       - name: Install
         run: pip install pandas pandas-datareader pyarrow yfinance numpy
 
-      - name: Run Sentinel V74
-        run: python sentinel_master.py
-
-      - name: Smart Sync & Clean
+      - name: Pre-Sync
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
-          
-          # 1. Alles hinzufügen
+          git pull --rebase origin main || echo "Clean start"
+
+      - name: Run Sentinel V76
+        run: python sentinel_master.py
+
+      - name: Robust Push
+        run: |
           git add isin_pool.json vault_status.txt heritage_vault/*.parquet
-          
-          # 2. Temporärer Commit (damit keine unstaged changes existieren)
-          git commit -m "V74: Data Refresh [$(date)]" || echo "Keine Änderungen"
-          
-          # 3. Rebase VOR dem Push um Konflikte zu lösen
+          git commit -m "V76: Reliable Sync [$(date)]" || echo "No changes"
+          # Nochmaliges Rebase vor dem Push, falls in den 4 Min ein anderer Job fertig wurde
           git pull --rebase origin main
-          
-          # 4. Push mit Gewalt (falls nötig)
           git push origin main
