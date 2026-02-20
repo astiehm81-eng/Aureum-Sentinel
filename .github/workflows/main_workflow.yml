@@ -2,12 +2,12 @@ name: Aureum Sentinel Perpetual Loop
 
 on:
   schedule:
-    - cron: '*/20 * * * *'
-  workflow_dispatch:
+    - cron: '*/20 * * * *' # Startet alle 20 Minuten
+  workflow_dispatch:      # Ermöglicht manuellen Test-Start
 
 concurrency:
   group: sentinel-run
-  cancel-in-progress: false
+  cancel-in-progress: false # Verhindert, dass sich Runs gegenseitig abbrechen
 
 jobs:
   sentinel-cycle:
@@ -15,6 +15,7 @@ jobs:
     permissions:
       contents: write
     
+    # Zentrale Definition der Keys für alle Schritte
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GOOGLE_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -23,34 +24,32 @@ jobs:
       - name: 📥 Repository laden
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # Wichtig für sauberen Git-Rebase
 
-      - name: 🐍 Python Setup
+      - name: 🐍 Python 3.11 Setup
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
 
-      - name: 📦 Pakete installieren
+      - name: 📦 Abhängigkeiten installieren
         run: pip install pandas yfinance pyarrow fastparquet google-genai requests
 
       - name: 🛡️ Phase 1 & 2 - Aureum Sentinel (Expansion & Monitoring)
         run: python aureum_sentinel.py
 
       - name: 💾 Phase 3 - Datenbank-Sync & Commit
-        if: always()
+        if: always() # Wird auch ausgeführt, wenn das Skript einen Fehler wirft
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel"
           
-          # Änderungen vormerken
+          # Sicherstellen, dass wir auf dem neuesten Stand sind
           git add .
-          
-          # Falls der Server neue Commits hat, weichen wir Konflikten aus
-          git stash || echo "Keine Änderungen zum Stashen"
+          git stash || echo "Keine lokalen Änderungen zum Stashen"
           git pull --rebase origin main
-          git stash pop || echo "Nichts zum Wiederherstellen"
+          git stash pop || echo "Keine Daten zum Wiederherstellen"
           
-          # Alles final committen
+          # Finale Sicherung der neuen ISINs und Anker-Punkte
           git add .
-          git commit -m "Cycle-Update V113: $(date +'%H:%M') [skip ci]" || echo "Keine Änderungen"
-          git push origin main
+          git commit -m "Aureum Update V114 [skip ci]" || echo "Keine Änderungen zu committen"
+          git push origin main || echo "Push fehlgeschlagen - versuche es im nächsten Zyklus"
