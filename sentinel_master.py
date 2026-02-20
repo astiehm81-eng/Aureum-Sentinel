@@ -1,36 +1,59 @@
 import pandas as pd
-import yfinance as yf
-import os, json, time
-from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor
+import os, json, glob
 
-# --- EISERNER STANDARD V100.6 (15-MIN-CYCLE-LOGIC) ---
-POOL_FILE = "isin_pool.json"
+# --- EISERNER STANDARD V101.1 (THE PURGE & RESTRUCTURE) ---
 BUFFER_FILE = "current_buffer.json"
-ANCHOR_THRESHOLD = 0.001
-MAX_WORKERS = 15
-RUNTIME_LIMIT = 780  # 13 Minuten Laufzeit
+HERITAGE_BASE = "heritage_vault"
 
-# ... [get_live_ticker_update & heal_gaps Funktionen wie in V100.5] ...
-
-def run_v100_6():
-    print(f"🛡️ V100.6 START | 15min Cycle Mode", flush=True)
-    start_time = time.time()
+def purge_flat_files():
+    """Löscht alle Dateien, die direkt im Root von heritage_vault liegen."""
+    print("🧹 Starte 'The Purge': Lösche flache Dateien im Root...", flush=True)
+    # Findet alle Dateien direkt im Ordner (keine Unterordner)
+    flat_files = [f for f in os.listdir(HERITAGE_BASE) if os.path.isfile(os.path.join(HERITAGE_BASE, f))]
     
-    # Der Loop läuft nun exakt 13 Minuten
-    while (time.time() - start_time) < RUNTIME_LIMIT:
-        loop_start = time.time()
-        
-        # 1. Ganzen Pool verarbeiten (mit integrierter Gap-Heilung aus V100.5)
-        # 2. 0,1% Anchor Check & Buffer Update
-        
-        # [Hier Aufruf der process_tick_v100_5 Logik]
-        
-        elapsed = time.time() - loop_start
-        # Wir warten bis zur nächsten vollen Minute
-        time.sleep(max(0, 60 - elapsed))
+    for f in flat_files:
+        try:
+            os.remove(os.path.join(HERITAGE_BASE, f))
+            print(f"🗑️ Gelöscht: {f}", flush=True)
+        except Exception as e:
+            print(f"⚠️ Fehler beim Löschen von {f}: {e}", flush=True)
 
-    print("🏁 13min erreicht. Beende für Git-Sync.", flush=True)
+def move_buffer_to_heritage_v101_1():
+    """Sortiert Buffer ein und räumt danach radikal auf."""
+    if not os.path.exists(BUFFER_FILE): 
+        # Auch wenn kein Buffer da ist, führen wir den Purge durch
+        purge_flat_files()
+        return
+
+    with open(BUFFER_FILE, 'r') as f:
+        buffer_data = json.load(f)
+
+    print("📁 Sortiere Buffer in Dekaden-Ordner ein...", flush=True)
+    for symbol, ticks in buffer_data.items():
+        if not ticks: continue
+        df = pd.DataFrame(ticks)
+        df['decade'] = (df['t'].str[:4].astype(int) // 10 * 10).astype(str) + "s"
+
+        for decade, decade_df in df.groupby('decade'):
+            target_dir = os.path.join(HERITAGE_BASE, decade)
+            if not os.path.exists(target_dir): os.makedirs(target_dir)
+            
+            file_path = os.path.join(target_dir, f"{symbol}.parquet")
+            clean_df = decade_df[['t', 'p']].rename(columns={'t': 'Date', 'p': 'Price'})
+
+            if os.path.exists(file_path):
+                old_df = pd.read_parquet(file_path)
+                clean_df = pd.concat([old_df, clean_df]).drop_duplicates(subset=['Date'], keep='last')
+            
+            clean_df.to_parquet(file_path, index=False)
+    
+    # Jetzt der radikale Schnitt:
+    purge_flat_files()
+    
+    # Buffer leeren
+    os.remove(BUFFER_FILE)
+    print("✨ Reinigung und Archivierung abgeschlossen.", flush=True)
 
 if __name__ == "__main__":
-    run_v100_6()
+    # Dieser Aufruf sollte in deinem täglichen Archiv-Lauf stehen
+    move_buffer_to_heritage_v101_1()
