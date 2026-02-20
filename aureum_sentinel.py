@@ -6,7 +6,8 @@ import time
 import multiprocessing
 import shutil
 import random
-from datetime import datetime
+import sys
+from datetime import datetime, timedelta
 from google import genai
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -15,9 +16,11 @@ POOL_FILE = "isin_pool.json"
 HERITAGE_DIR = "heritage"
 TICKER_FILE = os.path.join(HERITAGE_DIR, "live_ticker.feather")
 ANCHOR_FILE = "anchors_memory.json"
+REPORT_FILE = "coverage_report.txt"
 
 ANCHOR_THRESHOLD = 0.0005 
 PULSE_INTERVAL = 300      
+MAX_RUNTIME_SECONDS = 1200 # 20 Minuten Laufzeit pro Workflow-Start
 
 def log(tag, msg):
     ts = datetime.now().strftime('%H:%M:%S')
@@ -25,6 +28,7 @@ def log(tag, msg):
 
 class AureumSentinel:
     def __init__(self):
+        self.start_time = datetime.now()
         self._sanitize_environment()
         if not os.path.exists(HERITAGE_DIR): os.makedirs(HERITAGE_DIR)
         self.anchors = {}
@@ -33,42 +37,50 @@ class AureumSentinel:
         self._sync_and_audit()
 
     def _sanitize_environment(self):
-        log("CLEANUP", "System-Bereinigung läuft...")
+        log("CLEANUP", "System-Bereinigung wird durchgeführt...")
         old_dir = "heritage_vault"
         if os.path.exists(old_dir):
             if not os.path.exists(HERITAGE_DIR): os.makedirs(HERITAGE_DIR)
             for item in os.listdir(old_dir):
-                shutil.move(os.path.join(old_dir, item), os.path.join(HERITAGE_DIR, item))
+                try: shutil.move(os.path.join(old_dir, item), os.path.join(HERITAGE_DIR, item))
+                except: pass
             shutil.rmtree(old_dir)
-        for f in ["live_buffer.parquet", "system.lock", "current_buffer.parquet"]:
+        
+        # Entferne alle Leichen aus V120/V129
+        trash = ["live_buffer.parquet", "system.lock", "current_buffer.parquet", "dead_assets.json", "current_buffer.json"]
+        for f in trash:
             if os.path.exists(f): os.remove(f)
 
     def _sync_and_audit(self):
-        # Scannt den Bestand, um zu wissen, wer schon eine Historie hat
-        for f in os.listdir(HERITAGE_DIR):
-            if f.endswith(".parquet") and f.startswith("heritage_"):
-                try:
-                    df = pd.read_parquet(os.path.join(HERITAGE_DIR, f))
-                    self.known_assets.update(df['Ticker'].unique())
-                except: pass
+        if os.path.exists(HERITAGE_DIR):
+            for f in os.listdir(HERITAGE_DIR):
+                if f.endswith(".parquet"):
+                    try:
+                        df = pd.read_parquet(os.path.join(HERITAGE_DIR, f))
+                        self.known_assets.update(df['Ticker'].unique())
+                    except: pass
         
         if os.path.exists(ANCHOR_FILE):
-            with open(ANCHOR_FILE, "r") as f: self.anchors = json.load(f)
-        
-        log("HERITAGE", f"📊 Datenbasis: {len(self.known_assets)} Assets mit Historie vorhanden.")
+            try:
+                with open(ANCHOR_FILE, "r") as f: self.anchors = json.load(f)
+            except: pass
+        log("HERITAGE", f"📊 Inventur: {len(self.known_assets)} Assets im Archiv.")
 
-    def fetch_deep_history(self, symbol):
-        """Holt die maximale Historie für neue Assets."""
+    def fetch_data(self, symbol):
+        """Holt Deep History für neue Assets ODER nur den aktuellen Preis."""
         try:
             t = yf.Ticker(symbol)
-            # 'max' holt alles verfügbare (Tage/Jahre)
-            hist = t.history(period="max", interval="1d").reset_index()
-            if hist.empty: return symbol, None, pd.DataFrame()
+            # Falls Asset neu: Gesamte Historie saugen
+            if symbol not in self.known_assets or self.is_initial_start:
+                hist = t.history(period="max", interval="1d").reset_index()
+                if not hist.empty:
+                    hist = hist.rename(columns={'Date':'Date','Datetime':'Date','Close':'Price'})
+                    hist['Date'] = pd.to_datetime(hist['Date'], utc=True).dt.tz_localize(None)
+                    return symbol, t.fast_info.get('last_price'), hist[['Date', 'Price']]
             
-            hist = hist.rename(columns={'Date': 'Date', 'Datetime': 'Date', 'Close': 'Price'})
-            hist['Date'] = pd.to_datetime(hist['Date'], utc=True).dt.tz_localize(None)
-            return symbol, t.fast_info.get('last_price'), hist[['Date', 'Price']]
-        except:
+            # Sonst: Nur aktueller Live-Tick
+            return symbol, t.fast_info.get('last_price'), pd.DataFrame()
+        except Exception as e:
             return symbol, None, pd.DataFrame()
 
     def atomic_write(self, df, path):
@@ -81,42 +93,34 @@ class AureumSentinel:
                 df = pd.concat([old, df]).drop_duplicates(subset=['Date', 'Ticker']).sort_values('Date')
             df.to_parquet(tmp, compression='zstd', index=False)
             os.replace(tmp, path)
-        except Exception as e:
+        except:
             if os.path.exists(tmp): os.remove(tmp)
-            log("ERROR", f"Schreibfehler: {e}")
 
     def run_cycle(self):
-        if not os.path.exists(POOL_FILE): return
+        if not os.path.exists(POOL_FILE):
+            log("ERROR", "Kein ISIN-Pool gefunden!")
+            return
+
         with open(POOL_FILE, "r") as f: pool = json.load(f)
+        log("STATUS", f"Puls-Check: {len(pool)} Assets aktiv.")
         
-        log("STATUS", f"Puls-Check: {len(pool)} Assets.")
         ticker_batch, heritage_updates = [], []
         now = datetime.now().replace(microsecond=0)
 
-        with ThreadPoolExecutor(max_workers=40) as exe:
-            # Wenn Asset unbekannt -> Deep History, sonst nur aktueller Preis
-            tasks = []
-            for a in pool:
-                sym = a['symbol']
-                if sym not in self.known_assets or self.is_initial_start:
-                    tasks.append(exe.submit(self.fetch_deep_history, sym))
-                else:
-                    tasks.append(exe.submit(lambda s: (s, yf.Ticker(s).fast_info.get('last_price'), pd.DataFrame()), sym))
-
-            for f in as_completed(tasks):
+        with ThreadPoolExecutor(max_workers=50) as exe:
+            futures = [exe.submit(self.fetch_data, a['symbol']) for a in pool]
+            for f in as_completed(futures):
                 sym, price, hist = f.result()
                 if price:
                     log("TICK", f"💓 {sym}: {price}")
                     ticker_batch.append({"Date": now, "Ticker": sym, "Price": price})
                     
-                    # Verarbeite Historie (falls vorhanden/neu)
                     if not hist.empty:
                         heritage_updates.append(hist.assign(Ticker=sym))
                         self.known_assets.add(sym)
                     
-                    # Anker-Logik für Live-Daten
                     last = self.anchors.get(sym)
-                    if last is None or abs(price - last) / last >= ANCHOR_THRESHOLD:
+                    if self.is_initial_start or last is None or abs(price - last) / last >= ANCHOR_THRESHOLD:
                         self.anchors[sym] = price
                         heritage_updates.append(pd.DataFrame([{"Date": now, "Ticker": sym, "Price": price}]))
 
@@ -135,6 +139,33 @@ class AureumSentinel:
             self.is_initial_start = False
 
 if __name__ == "__main__":
-    # Finder Loop bleibt gleich...
+    # Finder Start
     key = os.getenv("GEMINI_API_KEY")
-    # ... (multiprocessing start etc wie in V134)
+    def finder(k):
+        client = genai.Client(api_key=k)
+        while True:
+            try:
+                r = client.models.generate_content(model="gemini-2.0-flash", contents="Nenne 50 Nasdaq Ticker. NUR JSON: ['AAPL', ...]")
+                new_s = json.loads(r.text.strip().replace("```json", "").replace("```", ""))
+                with open(POOL_FILE, "r") as f: p = json.load(f)
+                exist = {x['symbol'] for x in p}
+                added = [s.upper() for s in new_s if s.upper() not in exist]
+                if added:
+                    for s in added: p.append({"symbol": s, "added_at": datetime.now().isoformat()})
+                    with open(POOL_FILE, "w") as f: json.dump(p, f, indent=4)
+                    log("FINDER", f"✨ +{len(added)} neue Assets.")
+                time.sleep(600)
+            except: time.sleep(60)
+
+    p_finder = multiprocessing.Process(target=finder, args=(key,))
+    p_finder.start()
+
+    try:
+        sentinel = AureumSentinel()
+        # Kontrollierte Laufzeit, um GitHub Timeouts zu verhindern
+        while (datetime.now() - sentinel.start_time).seconds < MAX_RUNTIME_SECONDS:
+            sentinel.run_cycle()
+            time.sleep(PULSE_INTERVAL)
+        log("SYSTEM", "Reguläres Laufzeitende erreicht. Speichere und schließe.")
+    finally:
+        p_finder.terminate()
