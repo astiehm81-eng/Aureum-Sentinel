@@ -40,3 +40,6 @@
 [10:54:54] Deep-Healing Slot aktiv (59s verbleibend)...
 [11:02:30] Ticker-Thread aktiv.
 [11:02:30] Heritage-Gräber aktiv.
+[11:20:22] Expansion gestartet: 28 -> 10000 Assets...
+[11:20:22] Pool auf 31 Assets erweitert.
+[11:33:23] Lauf beendet.

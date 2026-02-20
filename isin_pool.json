@@ -110,5 +110,17 @@
     {
         "symbol": "SAN.PA",
         "isin": "PENDING"
+    },
+    {
+        "symbol": "GOOG",
+        "sector": "Auto-Expand"
+    },
+    {
+        "symbol": "LLY",
+        "sector": "Auto-Expand"
+    },
+    {
+        "symbol": "AVGO",
+        "sector": "Auto-Expand"
     }
 ]
