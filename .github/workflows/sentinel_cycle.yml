@@ -1,8 +1,8 @@
-name: Aureum Sentinel V76 - Reliable
+name: Aureum Sentinel V77 - NoFail
 
 on:
   schedule:
-    - cron: '*/5 * * * *' # Alle 5 Min für maximale Kontinuität
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -25,19 +25,22 @@ jobs:
       - name: Install
         run: pip install pandas pandas-datareader pyarrow yfinance numpy
 
-      - name: Pre-Sync
+      - name: Run Sentinel V77
+        run: python sentinel_master.py
+
+      - name: Atomic Git Push
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
-          git pull --rebase origin main || echo "Clean start"
-
-      - name: Run Sentinel V76
-        run: python sentinel_master.py
-
-      - name: Robust Push
-        run: |
+          
+          # 1. Alles für den Commit vormerken
           git add isin_pool.json vault_status.txt heritage_vault/*.parquet
-          git commit -m "V76: Reliable Sync [$(date)]" || echo "No changes"
-          # Nochmaliges Rebase vor dem Push, falls in den 4 Min ein anderer Job fertig wurde
+          
+          # 2. Commit erstellen (lokal)
+          git commit -m "V77: Stable Collection [$(date)]" || echo "No changes"
+          
+          # 3. Jetzt ziehen (Rebase ist jetzt sicher, da alles committet ist)
           git pull --rebase origin main
+          
+          # 4. Push
           git push origin main
