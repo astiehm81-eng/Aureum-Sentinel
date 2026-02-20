@@ -3,18 +3,19 @@ import yfinance as yf
 import os
 import json
 import time
-import sys
 import multiprocessing
+import shutil
+import random
 from datetime import datetime
 from google import genai
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # --- KONFIGURATION (EISERNER STANDARD) ---
 POOL_FILE = "isin_pool.json"
-HERITAGE_DIR = "heritage_vault"
+HERITAGE_DIR = "heritage"
 TICKER_FILE = os.path.join(HERITAGE_DIR, "live_ticker.feather")
-REPORT_FILE = "coverage_report.txt"
 ANCHOR_FILE = "anchors_memory.json"
+REPORT_FILE = "coverage_report.txt"
 
 ANCHOR_THRESHOLD = 0.0005 
 PULSE_INTERVAL = 300      
@@ -24,123 +25,132 @@ def log(tag, msg):
     ts = datetime.now().strftime('%H:%M:%S')
     print(f"[{ts}] [{tag}] {msg}", flush=True)
 
-# --- ROBUSTE SPEICHER-LOGIK ---
-def safe_atomic_save(df, target_path, format="parquet"):
-    temp_path = target_path + ".tmp"
-    try:
-        if format == "parquet":
-            df.to_parquet(temp_path, index=False)
-        else:
-            df.to_feather(temp_path)
-        os.replace(temp_path, target_path)
-    except:
-        if os.path.exists(temp_path): os.remove(temp_path)
-
-def save_to_decade(df):
-    if df.empty: return
-    df = df.copy()
-    df['Year'] = pd.to_datetime(df['Date']).dt.year
-    for year in df['Year'].unique():
-        decade = (year // 10) * 10
-        path = os.path.join(HERITAGE_DIR, f"heritage_{decade}s.parquet")
-        decade_df = df[df['Year'].between(decade, decade + 9)].drop(columns=['Year'])
-        if os.path.exists(path):
-            try:
-                old_df = pd.read_parquet(path)
-                decade_df = pd.concat([old_df, decade_df]).drop_duplicates(subset=['Date', 'Ticker'])
-            except: pass
-        safe_atomic_save(decade_df, path)
-
 class AureumSentinel:
     def __init__(self):
+        self._sanitize_environment() # Bereinigung vor Start
         if not os.path.exists(HERITAGE_DIR): os.makedirs(HERITAGE_DIR)
         self.anchors = {}
+        self._sync_anchors()
+
+    def _sanitize_environment(self):
+        """Löscht alles Nicht-Benötigte und migriert alte Strukturen."""
+        log("CLEANUP", "Initialisiere System-Bereinigung...")
+        
+        # 1. Migration von heritage_vault zu heritage
+        old_dir = "heritage_vault"
+        if os.path.exists(old_dir):
+            log("CLEANUP", f"Migriere Daten von {old_dir} nach {HERITAGE_DIR}...")
+            if not os.path.exists(HERITAGE_DIR): os.makedirs(HERITAGE_DIR)
+            for item in os.listdir(old_dir):
+                s = os.path.join(old_dir, item)
+                d = os.path.join(HERITAGE_DIR, item)
+                if os.path.isfile(s): shutil.move(s, d)
+            shutil.rmtree(old_dir)
+
+        # 2. Temporäre Dateien löschen
+        for root, dirs, files in os.walk("."):
+            for file in files:
+                if file.endswith(".tmp") or file.endswith(".temp"):
+                    os.remove(os.path.join(root, file))
+
+        # 3. Bekannte Altlasten-Dateien (aus früheren Versionen)
+        legacy_files = ["live_buffer.parquet", "system.lock", "data_gaps.json"]
+        for f in legacy_files:
+            if os.path.exists(f): os.remove(f)
+            
+        log("CLEANUP", "System ist nun im Soll-Zustand (Heritage-Standard).")
+
+    def _sync_anchors(self):
         if os.path.exists(ANCHOR_FILE):
             try:
                 with open(ANCHOR_FILE, "r") as f: self.anchors = json.load(f)
             except: pass
-        self.is_cold_start = not bool(self.anchors)
+        
+        if not self.anchors:
+            recent_file = os.path.join(HERITAGE_DIR, "heritage_2020s.parquet")
+            if os.path.exists(recent_file):
+                try:
+                    df = pd.read_parquet(recent_file)
+                    self.anchors = df.sort_values('Date').groupby('Ticker').last()['Price'].to_dict()
+                    log("INIT", f"⚓ {len(self.anchors)} Anker synchronisiert.")
+                except: pass
 
-    def run_pulse(self):
+    def atomic_write(self, df, path, format="parquet"):
+        tmp = path + ".tmp"
+        try:
+            df = df.dropna(subset=['Price'])
+            df = df[df['Price'] > 0]
+            if format == "parquet":
+                if os.path.exists(path):
+                    old = pd.read_parquet(path)
+                    df = pd.concat([old, df]).drop_duplicates(subset=['Date', 'Ticker']).sort_values('Date')
+                df.to_parquet(tmp, compression='zstd', index=False)
+            else:
+                df.to_feather(tmp)
+            os.replace(tmp, path)
+        except Exception as e:
+            if os.path.exists(tmp): os.remove(tmp)
+            log("ERROR", f"Schreibfehler: {e}")
+
+    def run_cycle(self):
         if not os.path.exists(POOL_FILE): return
         with open(POOL_FILE, "r") as f: pool = json.load(f)
         
-        log("STATUS", f"Puls-Check: {len(pool)} ISINs registriert. " + 
-            ("[KALTSTART]" if self.is_cold_start else "[ÜBERWACHUNG]"))
-        
-        ticker_updates = []
-        anchor_updates = []
+        log("STATUS", f"Puls-Check: {len(pool)} Assets aktiv.")
+        ticker_batch, anchor_batch = [], []
         now = datetime.now().replace(microsecond=0)
 
         with ThreadPoolExecutor(max_workers=60) as exe:
-            futures = [exe.submit(lambda s: (s, yf.Ticker(s).fast_info.get('last_price')), a['symbol']) for a in pool]
+            futures = {exe.submit(lambda s: (s, yf.Ticker(s).fast_info.get('last_price')), a['symbol']): a['symbol'] for a in pool}
             for f in as_completed(futures):
                 sym, price = f.result()
-                if price:
-                    # Ticker bekommt immer einen Eintrag
-                    ticker_updates.append({"Date": now, "Ticker": sym, "Price": price})
+                if price and price > 0:
+                    log("TICK", f"💓 {sym}: {price}")
+                    ticker_batch.append({"Date": now, "Ticker": sym, "Price": price})
                     
-                    # Anker-Logik
-                    last_price = self.anchors.get(sym)
-                    # Bedingung: Entweder Kaltstart ODER 0,05% Differenz
-                    if self.is_cold_start or last_price is None or abs(price - last_price) / last_price >= ANCHOR_THRESHOLD:
+                    last = self.anchors.get(sym)
+                    if last is None or abs(price - last) / last >= ANCHOR_THRESHOLD:
                         self.anchors[sym] = price
-                        anchor_updates.append({"Date": now, "Ticker": sym, "Price": price})
+                        anchor_batch.append({"Date": now, "Ticker": sym, "Price": price})
 
-        if ticker_updates:
-            # 1. Ticker Stream (Feather)
-            safe_atomic_save(pd.DataFrame(ticker_updates), TICKER_FILE, format="feather")
+        if ticker_batch:
+            self.atomic_write(pd.DataFrame(ticker_batch), TICKER_FILE, "feather")
+            if anchor_batch:
+                df_anchor = pd.DataFrame(anchor_batch)
+                df_anchor['Decade'] = (pd.to_datetime(df_anchor['Date']).dt.year // 10) * 10
+                for decade, chunk in df_anchor.groupby('Decade'):
+                    path = os.path.join(HERITAGE_DIR, f"heritage_{decade}s.parquet")
+                    self.atomic_write(chunk.drop(columns=['Decade']), path)
             
-            # 2. Heritage Decade Vault (Parquet)
-            if anchor_updates:
-                save_to_decade(pd.DataFrame(anchor_updates))
-            
-            # Anker-Memory sichern
             with open(ANCHOR_FILE, "w") as f: json.dump(self.anchors, f)
-            
-            log("PROGRESS", f"✅ {len(ticker_updates)} Assets erfasst. {len(anchor_updates)} Anker gesetzt.")
-            self.is_cold_start = False # Nach dem ersten erfolgreichen Puls beendet
-
-            # Report schreiben
-            with open(REPORT_FILE, "w") as rf:
-                rf.write(f"Aureum Sentinel Status - {now}\n")
-                rf.write(f"Gesamt Pool: {len(pool)}\n")
-                rf.write(f"Aktive Ticker: {len(ticker_updates)}\n")
-                rf.write(f"Initial-Anker gesetzt: {self.is_cold_start}\n")
+            log("PROGRESS", f"✅ {len(ticker_batch)} Ticks / {len(anchor_batch)} Anker.")
 
 if __name__ == "__main__":
-    key = os.getenv("GEMINI_API_KEY")
-    
-    # Expansion-Prozess
-    def expansion_task(k):
+    def finder_task(k):
         client = genai.Client(api_key=k)
         while True:
             try:
-                log("FINDER", "Suche neue ISINs...")
-                prompt = "Nenne 50 neue Nasdaq/DAX Tickersymbole. NUR JSON-Liste: ['AAPL', ...]"
-                resp = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
-                new_list = json.loads(resp.text.strip().replace("```json", "").replace("```", ""))
+                log("FINDER", "🔎 Suche neue ISINs...")
+                r = client.models.generate_content(model="gemini-2.0-flash", contents="Nenne 50 Nasdaq/NYSE Tickersymbole. NUR JSON: ['AAPL', ...]")
+                new_list = json.loads(r.text.strip().replace("```json", "").replace("```", ""))
                 with open(POOL_FILE, "r") as f: pool = json.load(f)
                 existing = {a['symbol'] for a in pool}
-                added = 0
-                for s in new_list:
-                    if s.upper() not in existing:
-                        pool.append({"symbol": s.upper(), "added_at": datetime.now().isoformat()})
-                        added += 1
-                if added > 0:
+                added = [s.upper() for s in new_list if s.upper() not in existing]
+                if added:
+                    for s in added: pool.append({"symbol": s, "added_at": datetime.now().isoformat()})
                     with open(POOL_FILE, "w") as f: json.dump(pool, f, indent=4)
-                    log("FINDER", f"✨ Pool erweitert: +{added} Assets.")
-                time.sleep(300)
+                    log("FINDER", f"✨ Pool +{len(added)} Assets. Stichprobe: {random.choice(added)}")
+                time.sleep(600)
             except: time.sleep(60)
 
-    p_exp = multiprocessing.Process(target=expansion_task, args=(key,))
-    p_exp.start()
+    key = os.getenv("GEMINI_API_KEY")
+    p = multiprocessing.Process(target=finder_task, args=(key,))
+    p.start()
     
     try:
         sentinel = AureumSentinel()
-        for _ in range(4): # 4 Pulse pro Workflow (ca. 20 Min)
-            sentinel.run_pulse()
+        while True:
+            sentinel.run_cycle()
             time.sleep(PULSE_INTERVAL)
     finally:
-        p_exp.terminate()
-        log("SYSTEM", "Zyklus beendet.")
+        p.terminate()
