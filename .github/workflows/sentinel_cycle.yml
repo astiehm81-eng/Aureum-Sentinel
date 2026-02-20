@@ -1,54 +1,41 @@
-name: Aureum Sentinel V101.1 - Archive & Purge
+name: Aureum Sentinel V101.2 - Live Ticker
 
 on:
   schedule:
-    - cron: '55 23 * * *' # Täglich kurz vor Mitternacht (UTC)
-  workflow_dispatch:      # Manueller Startknopf für sofortige Reinigung
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  archive_and_clean:
+  ticker:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     
     steps:
-      - name: 📥 Checkout Repository
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
 
-      - name: 🐍 Setup Python 3.10
+      - name: 🐍 Python Setup
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: 📦 Install Financial Toolkit
+      - name: 📦 Install
         run: pip install pandas pyarrow yfinance requests
 
-      - name: 🧹 Execute Purge & Restructure
-        run: |
-          # Wir rufen direkt die neue V101.1 Funktion auf
-          # Stelle sicher, dass move_buffer_to_heritage_v101_1() im Skript ist
-          python -c "from sentinel_master import move_buffer_to_heritage_v101_1; move_buffer_to_heritage_v101_1()"
+      - name: 🛰️ Run Cycle
         env:
           PYTHONUNBUFFERED: 1
+        run: python sentinel_master.py
 
-      - name: 🏛️ Commit Structural Changes
+      - name: 💾 Sync Buffer
         if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
-          
-          # Wir löschen die getrackten Dateien im Root aus dem Git-Index
-          # und fügen die neuen Dekaden-Ordner hinzu
-          git add heritage_vault/
-          git add current_buffer.json || true
-          
-          # Falls Dateien gelöscht wurden, muss Git das wissen (git add -A)
-          git add -A
-          
-          git commit -m "🏛️ V101.1: Decade Restructure & Root Purge Complete [$(date +'%d.%m.%Y')]" || echo "Keine Änderungen nötig"
-          
+          git add current_buffer.json vault_status.txt || true
+          git commit -m "🩹 Buffer Sync [$(date +'%H:%M')]" || echo "No changes"
           git pull --rebase origin main
           git push origin main
