@@ -1,9 +1,11 @@
 name: Aureum Sentinel Perpetual Loop
 on:
   schedule:
+    # Startet alle 20 Minuten (Standard-Intervall)
     - cron: '*/20 * * * *'
   workflow_dispatch:
   repository_dispatch:
+    # Ermöglicht das sofortige Fortsetzen nach einem erfolgreichen Run
     types: [next_cycle]
 
 jobs:
@@ -12,24 +14,36 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - name: Python Environment
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-      - name: Dependencies
-        run: pip install pandas yfinance pyarrow fastparquet
-      - name: Run Sentinel Cycle
+
+      - name: Install Dependencies
+        run: |
+          pip install pandas yfinance pyarrow fastparquet
+
+      - name: Run Sentinel Cycle (Max 15 Min)
         run: python aureum_sentinel.py
-      - name: Secure Data Sync
+
+      - name: Secure Data Sync & Snapshot
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel"
+          # Holen eventueller Änderungen während der Laufzeit
           git pull --rebase origin main
+          # Alle relevanten Datenbank- und Statusdateien hinzufügen
           git add heritage_vault/*.parquet anchors_memory.json vault_status.txt AUREUM_SNAPSHOT.txt isin_pool.json
-          git commit -m "Cycle-Update [skip ci]" || echo "No changes"
+          # Commit nur wenn Änderungen vorhanden sind
+          git commit -m "Cycle-Update: Rohdaten & Snapshot [skip ci]" || echo "No changes to commit"
           git push
-      - name: Auto Re-Trigger
+
+      - name: Auto Re-Trigger (Perpetual Loop)
         run: |
           curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
           -H "Accept: application/vnd.github.v3+json" \
