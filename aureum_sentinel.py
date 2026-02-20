@@ -6,18 +6,18 @@ import time
 import sys
 import multiprocessing
 import requests
-import io
 from datetime import datetime
 from google import genai
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# --- KONFIGURATION ---
+# --- ROBUSTE KEY-ABFRAGE ---
+API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+
 POOL_FILE = "isin_pool.json"
 HERITAGE_DIR = "heritage_vault"
 BUFFER_FILE = os.path.join(HERITAGE_DIR, "live_buffer.parquet")
 ANCHOR_FILE = "anchors_memory.json"
 REPORT_FILE = "coverage_report.txt"
-API_KEY = os.getenv("GEMINI_API_KEY")
 
 ANCHOR_THRESHOLD = 0.0005 
 PULSE_INTERVAL = 300      
@@ -28,23 +28,24 @@ def log(tag, msg):
     ts = datetime.now().strftime('%H:%M:%S')
     print(f"[{ts}] [{tag}] {msg}", flush=True)
 
-# --- FINDER (Aggressives Mining) ---
 def run_finder_continuous():
     if not API_KEY:
-        log("FINDER", "❌ ERROR: API_KEY fehlt in der Umgebung!")
+        log("FINDER", "❌ ERROR: API_KEY ist leer! Prüfe GitHub Secrets 'GEMINI_API_KEY'.")
         return
 
-    client = genai.Client(api_key=API_KEY)
-    start_finder = time.time()
-    
-    while (time.time() - start_finder) < (TOTAL_RUNTIME - 60):
-        try:
-            segments = ["Global Mega-Caps", "Nasdaq Tech", "DAX All-Share", "Crypto Top 1000", "Energy & Commodities", "Financials Worldwide"]
+    try:
+        client = genai.Client(api_key=API_KEY)
+        start_finder = time.time()
+        
+        while (time.time() - start_finder) < (TOTAL_RUNTIME - 60):
+            # Sektoren-Rotation basierend auf aktueller Sekunde für Varianz
+            segments = ["Global Mega-Caps", "Nasdaq 100", "S&P 500", "DAX 40", "Crypto USD", "Commodities"]
             seg = segments[int(time.time()) % len(segments)]
             
-            log("FINDER", f"Suche 250 Ticker für: {seg}...")
-            prompt = f"Gib mir eine Liste von 250 unterschiedlichen Yahoo Tickersymbolen für {seg}. Antwort NUR als JSON-Array: [{{'symbol': 'AAPL'}}, ...]"
+            log("FINDER", f"Mining Ticker für: {seg}...")
+            prompt = f"Gib mir 250 Yahoo Finance Tickersymbole für {seg}. NUR JSON-Array: [{{'symbol': 'AAPL'}}, ...]"
             
+            # Modell auf gemini-2.0-flash setzen für Speed
             response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
             raw_text = response.text.strip().replace("```json", "").replace("```", "")
             new_tickers = json.loads(raw_text)
@@ -56,7 +57,7 @@ def run_finder_continuous():
             existing = {a['symbol'] for a in pool}
             added = 0
             for item in new_tickers:
-                sym = item['symbol'].upper()
+                sym = str(item['symbol']).upper()
                 if sym not in existing:
                     pool.append({"symbol": sym, "added_at": datetime.now().isoformat()})
                     existing.add(sym)
@@ -65,15 +66,13 @@ def run_finder_continuous():
             if added > 0:
                 with open(POOL_FILE, "w") as f:
                     json.dump(pool, f, indent=4)
-                log("FINDER", f"🚀 Pool-Update: +{added} neue Ticker. Gesamtbestand: {len(pool)}")
+                log("FINDER", f"🚀 Pool-Update: +{added} Ticker (Gesamt: {len(pool)})")
             
-            # Kurzer Cooldown für API
-            time.sleep(20)
-        except Exception as e:
-            log("FINDER", f"⚠️ Fehler: {e}")
-            time.sleep(10)
+            time.sleep(15) # Schnellerer Turnus
+    except Exception as e:
+        log("FINDER", f"⚠️ Fehler: {str(e)[:100]}")
+        time.sleep(10)
 
-# --- SENTINEL (Puls & Anker) ---
 class AureumSentinel:
     def __init__(self):
         self.anchors = {}
@@ -85,11 +84,18 @@ class AureumSentinel:
 
     def fetch_pulse(self, symbol):
         try:
+            # Schneller Check ohne History-Overhead für den Live-Puls
             t = yf.Ticker(symbol)
-            df = t.history(period="1d", interval="1m")
-            if df.empty: return None
+            data = t.basic_info
+            current_p = data.get('lastPrice') or data.get('previousClose')
             
-            current_p = round(df['Close'].iloc[-1], 4)
+            if not current_p:
+                df = t.history(period="1d")
+                if not df.empty: current_p = df['Close'].iloc[-1]
+            
+            if not current_p: return None
+            
+            current_p = round(float(current_p), 4)
             last_p = self.anchors.get(symbol)
             
             if last_p is None or abs(current_p - last_p) / last_p >= ANCHOR_THRESHOLD:
@@ -98,35 +104,23 @@ class AureumSentinel:
         except: pass
         return None
 
-    def save_buffer(self, results):
-        df_new = pd.DataFrame(results)
-        if os.path.exists(BUFFER_FILE):
-            df_old = pd.read_parquet(BUFFER_FILE)
-            df_final = pd.concat([df_old, df_new]).drop_duplicates(subset=['Date', 'Ticker'])
-        else:
-            df_final = df_new
-        df_final.to_parquet(BUFFER_FILE, index=False)
-        with open(ANCHOR_FILE, "w") as f: json.dump(self.anchors, f)
-
     def run_cycle(self):
-        log("SENTINEL", "Eisernen Standard gestartet.")
+        log("SENTINEL", "Aureum Sentinel aktiv.")
         start_time = time.time()
         
         while (time.time() - start_time) < TOTAL_RUNTIME:
             loop_start = time.time()
-            
             if os.path.exists(POOL_FILE):
                 with open(POOL_FILE, "r") as f: pool = json.load(f)
             else: pool = []
 
             if not pool:
-                log("SENTINEL", "Warte auf Finder (Pool leer)...")
-                time.sleep(15)
+                log("SENTINEL", "Warten auf Pool-Initialisierung...")
+                time.sleep(10)
                 continue
 
             log("SENTINEL", f"💓 Puls-Check ({len(pool)} Assets)...")
             results = []
-            
             with ThreadPoolExecutor(max_workers=MAX_WORKERS) as exe:
                 futures = {exe.submit(self.fetch_pulse, a['symbol']): a['symbol'] for a in pool}
                 for f in as_completed(futures):
@@ -134,26 +128,28 @@ class AureumSentinel:
                     if res: results.append(res)
 
             if results:
-                self.save_buffer(results)
-                log("SENTINEL", f"💾 {len(results)} Ankerpunkte gesichert.")
+                df_new = pd.DataFrame(results)
+                if os.path.exists(BUFFER_FILE):
+                    df_old = pd.read_parquet(BUFFER_FILE)
+                    df_final = pd.concat([df_old, df_new]).drop_duplicates(subset=['Date', 'Ticker'])
+                else:
+                    df_final = df_new
+                df_final.to_parquet(BUFFER_FILE, index=False)
+                with open(ANCHOR_FILE, "w") as f: json.dump(self.anchors, f)
+                log("SENTINEL", f"💾 {len(results)} Anker gesichert.")
 
             with open(REPORT_FILE, "w") as f:
-                f.write(f"AUREUM SENTINEL REPORT\nAssets: {len(pool)}\nSync: {datetime.now()}\n")
+                f.write(f"AUREUM SENTINEL\nAbdeckung: {len(pool)}\nStand: {datetime.now()}\n")
 
             wait = max(10, PULSE_INTERVAL - (time.time() - loop_start))
             if (time.time() - start_time) + PULSE_INTERVAL > TOTAL_RUNTIME: break
-            log("SENTINEL", f"💤 Warte {int(wait)}s.")
             time.sleep(wait)
 
 if __name__ == "__main__":
     finder_p = multiprocessing.Process(target=run_finder_continuous)
     finder_p.start()
-
     try:
-        sentinel = AureumSentinel()
-        sentinel.run_cycle()
-    except Exception as e:
-        log("SYSTEM", f"Fataler Fehler: {e}")
-    
-    finder_p.terminate()
-    log("SYSTEM", "Zyklus beendet.")
+        AureumSentinel().run_cycle()
+    finally:
+        finder_p.terminate()
+        log("SYSTEM", "Zyklus beendet.")
