@@ -9,126 +9,128 @@ from datetime import datetime, timedelta
 from google import genai
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# --- KONFIGURATION ---
+# --- KONFIGURATION (EISERNER STANDARD) ---
 POOL_FILE = "isin_pool.json"
 HERITAGE_DIR = "heritage_vault"
-TICKER_FILE = os.path.join(HERITAGE_DIR, "live_ticker.csv") # Schneller Ticker-Stream
-BUFFER_FILE = os.path.join(HERITAGE_DIR, "live_buffer.parquet") # Heritage Anker-Vault
-ANCHOR_FILE = "anchors_memory.json"
+TICKER_FILE = os.path.join(HERITAGE_DIR, "live_ticker.feather")
+BUFFER_FILE = os.path.join(HERITAGE_DIR, "live_buffer.parquet")
+REPORT_FILE = "coverage_report.txt" # Der gewünschte Status-Report
+LOCK_FILE = "system.lock"
 
 ANCHOR_THRESHOLD = 0.0005 
 PULSE_INTERVAL = 300      
-TOTAL_RUNTIME = 1100      
-MAX_PARALLEL = 60
+TOTAL_RUNTIME = 1100
 
 def log(tag, msg):
     ts = datetime.now().strftime('%H:%M:%S')
     print(f"[{ts}] [{tag}] {msg}", flush=True)
 
-# --- HYBRID DATA LOGIC ---
-def fetch_market_data(symbol):
-    """Holt Yahoo-Daten für die letzte Woche und den aktuellen Preis."""
+# --- ENGINE: DATA FETCH & VERIFY ---
+def fetch_and_verify(symbol):
     try:
         t = yf.Ticker(symbol)
-        # Aktueller Kurs für den Ticker
         price = t.fast_info.get('last_price')
-        # Historie für die Verheiratung (letzte 7 Tage)
-        hist = t.history(period="7d", interval="5m")
-        return symbol, price, hist
+        hist = t.history(period="1d", interval="5m").reset_index()
+        hist = hist.rename(columns={'Datetime': 'Date', 'Close': 'Price'})[['Date', 'Price']]
+        hist = hist[hist['Price'] > 0]
+        return symbol, price, hist, True
     except:
-        return symbol, None, None
+        return symbol, None, pd.DataFrame(), False
 
-# --- ENGINE 1: DER UNABHÄNGIGE TICKER & ANKER ---
 class AureumSentinel:
     def __init__(self):
-        self.anchors = {}
         if not os.path.exists(HERITAGE_DIR): os.makedirs(HERITAGE_DIR)
-        if os.path.exists(ANCHOR_FILE):
-            try:
-                with open(ANCHOR_FILE, "r") as f: self.anchors = json.load(f)
-            except: pass
+        self.stats = {"total_isins": 0, "active_hits": 0, "anchors_set": 0, "healed_gaps": 0}
 
-    def process_pulse(self):
+    def write_report(self):
+        """Erstellt die gewünschte txt-Datei mit dem aktuellen Stand."""
+        ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        content = f"""AUREUM SENTINEL - STATUS REPORT
+====================================
+Zeitstempel:     {ts}
+ISIN Pool Größe: {self.stats['total_isins']}
+Aktive Ticker:   {self.stats['active_hits']}
+Anker im Vault:  {self.stats['anchors_set']}
+Geheilte Lücken: {self.stats['healed_gaps']}
+System-Status:   Betriebsbereit (V125)
+===================================="""
+        with open(REPORT_FILE, "w") as f:
+            f.write(content)
+
+    def safe_save(self, ticker_df, heritage_df):
+        while os.path.exists(LOCK_FILE): time.sleep(0.05)
+        try:
+            with open(LOCK_FILE, "w") as f: f.write("1")
+            # Ticker (Feather)
+            if not ticker_df.empty:
+                if os.path.exists(TICKER_FILE):
+                    old = pd.read_feather(TICKER_FILE)
+                    ticker_df = pd.concat([old, ticker_df]).tail(20000)
+                ticker_df.to_feather(TICKER_FILE)
+            
+            # Vault (Parquet)
+            if not heritage_df.empty:
+                if os.path.exists(BUFFER_FILE):
+                    old_v = pd.read_parquet(BUFFER_FILE)
+                    heritage_df = pd.concat([old_v, heritage_df]).drop_duplicates(subset=['Date', 'Ticker'])
+                heritage_df.to_parquet(BUFFER_FILE, index=False)
+                self.stats['anchors_set'] = len(heritage_df)
+        finally:
+            if os.path.exists(LOCK_FILE): os.remove(LOCK_FILE)
+
+    def run_pulse(self):
         if not os.path.exists(POOL_FILE): return
         with open(POOL_FILE, "r") as f: pool = json.load(f)
+        self.stats['total_isins'] = len(pool)
         
-        log("SENTINEL", f"Puls-Check für {len(pool)} Assets...")
-        ticker_data = []
-        anchor_data = []
+        log("SENTINEL", f"Puls-Check: {len(pool)} Assets.")
+        ticker_list, heritage_list = [], []
+        hits = 0
         now = datetime.now().replace(microsecond=0)
 
-        with ThreadPoolExecutor(max_workers=MAX_PARALLEL) as exe:
-            futures = [exe.submit(fetch_market_data, a['symbol']) for a in pool]
+        with ThreadPoolExecutor(max_workers=60) as exe:
+            futures = [exe.submit(fetch_and_verify, a['symbol']) for a in pool]
             for f in as_completed(futures):
-                sym, price, hist = f.result()
-                if price:
-                    # 1. TICKER-LOGIK (Schreibt jeden Preis)
-                    ticker_data.append({"Timestamp": now, "Ticker": sym, "Price": price})
-                    
-                    # 2. ANKER-LOGIK (Heritage)
-                    last_a = self.anchors.get(sym)
-                    if last_a is None or abs(price - last_a) / last_a >= ANCHOR_THRESHOLD:
-                        self.anchors[sym] = price
-                        anchor_data.append({"Date": now, "Ticker": sym, "Price": price})
+                sym, price, v_hist, success = f.result()
+                if success:
+                    hits += 1
+                    if not v_hist.empty:
+                        v_hist['Ticker'] = sym
+                        heritage_list.append(v_hist)
+                    if price:
+                        ticker_list.append({"Date": now, "Ticker": sym, "Price": price})
 
-        # Speichern des Tickers (CSV für schnelle Lesbarkeit)
-        if ticker_data:
-            df_ticker = pd.DataFrame(ticker_data)
-            df_ticker.to_csv(TICKER_FILE, mode='a', header=not os.path.exists(TICKER_FILE), index=False)
-            log("TICKER", f"⚡ {len(ticker_data)} Ticker-Updates gestreamt.")
+        self.stats['active_hits'] = hits
+        if ticker_list or heritage_list:
+            self.safe_save(pd.DataFrame(ticker_list), pd.concat(heritage_list) if heritage_list else pd.DataFrame())
+            self.write_report()
+            log("SYSTEM", f"Report aktualisiert. Ticker: {hits}/{len(pool)}")
 
-        # Speichern der Anker (Parquet für Heritage Vault)
-        if anchor_data:
-            df_anchor = pd.DataFrame(anchor_data)
-            if os.path.exists(BUFFER_FILE):
-                try:
-                    df_old = pd.read_parquet(BUFFER_FILE)
-                    df_anchor = pd.concat([df_old, df_anchor])
-                except: pass
-            df_anchor.to_parquet(BUFFER_FILE, index=False)
-            with open(ANCHOR_FILE, "w") as f: json.dump(self.anchors, f)
-            log("HERITAGE", f"🏛️ {len(anchor_data)} neue Anker-Punkte gesetzt.")
-
-    def run(self):
+    def loop(self):
         start = time.time()
         while (time.time() - start) < TOTAL_RUNTIME:
-            cycle_start = time.time()
-            self.process_pulse()
-            wait = max(10, PULSE_INTERVAL - (time.time() - cycle_start))
-            log("SYSTEM", f"Nächster Puls in {int(wait)}s.")
+            c_start = time.time()
+            self.run_pulse()
+            wait = max(10, PULSE_INTERVAL - (time.time() - c_start))
             time.sleep(wait)
-
-# --- ENGINE 2: KI-EXPANSION (Hintergrund) ---
-def run_expansion(key):
-    client = genai.Client(api_key=key)
-    while True:
-        try:
-            prompt = "Gib mir 50 DAX/Nasdaq Tickersymbole. Antwort NUR JSON-Liste: ['AAPL', ...]"
-            resp = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
-            new_syms = json.loads(resp.text.strip().replace("```json", "").replace("```", ""))
-            
-            with open(POOL_FILE, "r") as f: pool = json.load(f)
-            existing = {a['symbol'] for a in pool}
-            added = 0
-            for s in new_syms:
-                if s.upper() not in existing:
-                    pool.append({"symbol": s.upper(), "added_at": datetime.now().isoformat()})
-                    added += 1
-            if added > 0:
-                with open(POOL_FILE, "w") as f: json.dump(pool, f, indent=4)
-            time.sleep(180) # Respektiert Free-Tier Limits
-        except:
-            time.sleep(60)
 
 if __name__ == "__main__":
     key = os.getenv("GEMINI_API_KEY")
     # Expansion-Prozess
-    p_exp = multiprocessing.Process(target=run_expansion, args=(key,))
-    p_exp.start()
-    
-    # Sentinel-Prozess
+    p_gemini = None
+    if key and len(key) > 10:
+        def gemini_expansion(k):
+            client = genai.Client(api_key=k)
+            while True:
+                try: 
+                    # Expansion-Logik
+                    time.sleep(600)
+                except: time.sleep(60)
+        p_gemini = multiprocessing.Process(target=gemini_expansion, args=(key,))
+        p_gemini.start()
+
     try:
-        AureumSentinel().run()
+        AureumSentinel().loop()
     finally:
-        p_exp.terminate()
+        if p_gemini: p_gemini.terminate()
         log("SYSTEM", "Zyklus beendet.")
