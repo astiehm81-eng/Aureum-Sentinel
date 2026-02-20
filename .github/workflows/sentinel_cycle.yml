@@ -1,4 +1,4 @@
-name: Aureum Sentinel V82 - Audit Sync
+name: Aureum Sentinel V84 - Universal Translator
 
 on:
   schedule:
@@ -23,24 +23,16 @@ jobs:
           python-version: '3.10'
 
       - name: Install
-        run: pip install pandas pyarrow yfinance
+        run: pip install pandas pyarrow yfinance requests
 
-      - name: Run V82 Master
+      - name: Run V84 Master
         run: python sentinel_master.py
 
-      - name: Force Push Updates
+      - name: Atomic Sync
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
-          
-          # Sicherstellen, dass wir keine Reste haben
-          git add vault_status.txt dead_assets.json heritage_vault/*.parquet
-          
-          # Änderungen stashen, pullen, poppen (sicherster Weg gegen Konflikte)
-          git stash || echo "Nothing to stash"
+          git add vault_status.txt ticker_mapping.json dead_assets.json heritage_vault/*.parquet
+          git commit -m "V84: Mapping & Archive Update [$(date)]" || echo "No changes"
           git pull --rebase origin main
-          git stash pop || echo "Nothing to pop"
-          
-          git add .
-          git commit -m "V82: Gap-Audit & Archive Refresh [$(date)]" || echo "No changes"
           git push origin main
