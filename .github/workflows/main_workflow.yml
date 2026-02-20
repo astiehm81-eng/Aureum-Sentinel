@@ -26,20 +26,20 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: 📦 Pakete installieren
-        run: pip install pandas yfinance pyarrow fastparquet google-genai
+      - name: 📦 Pakete (Präzisions-Stack)
+        run: pip install pandas yfinance pyarrow fastparquet google-genai requests
 
-      - name: 🛡️ Phase 1 & 2 - Aureum Multi-Process Execution
+      - name: 🛡️ Phase 1 & 2 - Aureum Sentinel (Parallel Mode)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python aureum_sentinel.py
 
-      - name: 💾 Phase 3 - Datenbank-Sync & Commit
+      - name: 💾 Phase 3 - Datenbank-Sync
         if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel"
           git pull --rebase origin main
           git add heritage_vault/*.parquet anchors_memory.json isin_pool.json coverage_report.txt || true
-          git commit -m "Cycle-Update: $(date +'%H:%M') [skip ci]" || echo "No changes"
+          git commit -m "Sentinel-Cycle: $(date +'%H:%M') [skip ci]" || echo "No changes"
           git push origin main
