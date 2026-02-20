@@ -1,53 +1,50 @@
 name: Aureum Sentinel Perpetual Loop
 on:
   schedule:
-    - cron: '*/20 * * * *' # Startet alle 20 Minuten
-  workflow_dispatch:      # Ermöglicht manuellen Start
-  repository_dispatch:    # Ermöglicht den Loop durch Re-Trigger
+    - cron: '*/20 * * * *'
+  workflow_dispatch:
+  repository_dispatch:
     types: [next_cycle]
 
 jobs:
   sentinel-cycle:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Erforderlich, um Daten in das Repo zu pushen
+      contents: write
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Python
+      - name: Python Setup
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: Install Dependencies
-        run: |
-          pip install pandas yfinance pyarrow fastparquet google-generativeai
+      - name: Dependencies
+        run: pip install pandas yfinance pyarrow fastparquet google-generativeai
 
       - name: Step 1: Growth Engine (Finder)
-        # Sucht neue Ticker und erweitert die isin_pool.json
+        continue-on-error: true # Verhindert Abbruch, falls API-Key fehlt
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python aureum_gemini_finder.py
 
       - name: Step 2: Monitoring Engine (Sentinel)
-        # Führt erst Heritage-Heal (B) und dann Live-Puls (A) aus
         run: python aureum_sentinel.py
 
-      - name: Step 3: Secure Data Sync & Snapshot
-        # Sichert alle Änderungen (Pool-Wachstum, Anker, Parquet-Files)
+      - name: Step 3: Secure Data Sync
+        if: always() # Läuft auch, wenn Sentinel wegen Timeout abbricht
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel"
-          git pull --rebase origin main
-          git add heritage_vault/*.parquet anchors_memory.json vault_status.txt AUREUM_SNAPSHOT.txt isin_pool.json
-          git commit -m "Cycle-Update: Pool & Heritage Sync [skip ci]" || echo "No changes"
-          git push
+          git add heritage_vault/*.parquet anchors_memory.json vault_status.txt AUREUM_SNAPSHOT.txt isin_pool.json || true
+          git commit -m "System-Update [skip ci]" || echo "No changes"
+          git push origin main || echo "Push failed"
 
-      - name: Step 4: Perpetual Loop Trigger
-        # Triggert den nächsten Durchlauf für lückenlose Überwachung
+      - name: Step 4: Re-Trigger
+        if: success()
         run: |
           curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
           -H "Accept: application/vnd.github.v3+json" \
