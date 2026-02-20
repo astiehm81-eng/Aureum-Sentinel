@@ -1,52 +1,51 @@
-name: Aureum Sentinel V93 - Global Live-Sync
+name: Aureum Sentinel V95 - Heritage Fusion
 
 on:
   schedule:
-    - cron: '*/10 * * * *' # Alle 10 Minuten für echten Live-Charakter
-  workflow_dispatch: # Manueller Start jederzeit möglich
+    - cron: '*/15 * * * *' # Alle 15 Min (etwas mehr Puffer für Fusion-Logik)
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  sentinel_sync:
+  fusion_sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 15 # Genug Puffer für den 100er Batch
+    timeout-minutes: 20 # Erhöht für Deep-Merge Prozesse
     
     steps:
-      - name: 📥 Checkout Repository
+      - name: 📥 Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1 # Wir brauchen nur den neuesten Stand für Speed
+          fetch-depth: 1
 
-      - name: 🐍 Setup Python 3.10
+      - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
           cache: 'pip'
 
-      - name: 📦 Install Financial Toolkit
+      - name: 📦 Install Requirements
         run: |
           pip install --upgrade pip
           pip install pandas pyarrow yfinance requests
 
-      - name: 🛰️ Run Aureum Sentinel V93
+      - name: 🧬 Run Heritage Fusion
         run: python sentinel_master.py
-        # Wir unterdrücken den Error-Exit, damit der Sync-Step immer läuft
         continue-on-error: true 
 
-      - name: 🔄 Atomic Data Sync
+      - name: 💾 Persistence Layer
         if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
           
-          # Hinzufügen der neuen Parquet-Daten und des aktualisierten Pools
-          git add isin_pool.json vault_status.txt heritage_vault/*.parquet || true
+          # Sicherstellen, dass neue Parquet-Dateien im Vault erfasst werden
+          git add heritage_vault/*.parquet vault_status.txt || true
           
-          # Commit nur wenn sich wirklich etwas geändert hat
-          git commit -m "⚡ Live-Sync & Expansion Update [$(date +'%Y-%m-%d %H:%M')]" || echo "Keine Änderungen"
+          # Commit mit Zusammenfassung
+          git commit -m "🧬 V95: Heritage Fusion Update [$(date +'%d.%m.%Y %H:%M')]" || echo "Keine Änderungen"
           
-          # Rebase um Konflikte bei schnellen Intervallen zu vermeiden
+          # Rebase & Push (Essential für parallele Läufe)
           git pull --rebase origin main
           git push origin main
