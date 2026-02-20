@@ -1,6 +1,4 @@
-🛡️ AUREUM SENTINEL V82
-📅 00:44:27
-==============================
-📊 Abdeckung: 0.12%
-✅ Assets: 13
-💀 Blacklist: 60
+🛡️ AUREUM SENTINEL V85
+✅ Archiviert: 13
+🗺️ Mappings: 0
+💀 Blacklist: 90
