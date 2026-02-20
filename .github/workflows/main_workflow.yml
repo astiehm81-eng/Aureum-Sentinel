@@ -2,10 +2,9 @@ name: Aureum Sentinel Perpetual Loop
 
 on:
   schedule:
-    - cron: '*/20 * * * *' # Alle 20 Minuten (Gibt GitHub 5 Min Zeit zum Committen)
-  workflow_dispatch:      # Manueller Start erlaubt
+    - cron: '*/20 * * * *'
+  workflow_dispatch:
 
-# WICHTIG: Stoppt sofortige Mehrfach-Runs
 concurrency:
   group: sentinel-run
   cancel-in-progress: false
@@ -27,17 +26,16 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: 📦 Pakete
-        run: pip install pandas yfinance pyarrow fastparquet google-generativeai
+      - name: 📦 Pakete installieren
+        run: pip install pandas yfinance pyarrow fastparquet google-genai pandas_datareader
 
       - name: 🔍 Phase 1 - Finder (Wachstum)
         continue-on-error: true
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GOOGLE_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python aureum_gemini_finder.py
 
-      - name: 🛡️ Phase 2 - Sentinel (15 Min Datensammlung)
+      - name: 🛡️ Phase 2 - Sentinel (Datensammlung & Self-Healing)
         run: python aureum_sentinel.py
 
       - name: 💾 Phase 3 - Datenbank-Sync & Commit
@@ -46,6 +44,6 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel"
           git pull --rebase origin main
-          git add heritage_vault/*.parquet anchors_memory.json isin_pool.json || true
+          git add heritage_vault/*.parquet anchors_memory.json isin_pool.json coverage_report.txt || true
           git commit -m "Cycle-Update: $(date +'%H:%M') [skip ci]" || echo "No changes"
           git push origin main
