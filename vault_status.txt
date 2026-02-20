@@ -1,1 +1,12 @@
-[2026-02-20 07:57:39] 📡 Ticker läuft: 28 Assets...[09:01:25] Sentinel V104 DUAL-ENGINE aktiv (Pool: 28)
+[20.02. 09:46:01] START V105.1: Analyse von 28 Assets. Plausibilitäts-Check aktiv.
+[20.02. 09:46:03] Buffer: 28 Anker validiert.
+[20.02. 09:48:02] Buffer: 4 Anker validiert.
+[20.02. 09:50:02] Buffer: 2 Anker validiert.
+[20.02. 09:51:02] Buffer: 1 Anker validiert.
+[20.02. 09:52:02] Buffer: 3 Anker validiert.
+[20.02. 09:53:02] Buffer: 1 Anker validiert.
+[20.02. 09:54:02] Buffer: 3 Anker validiert.
+[20.02. 09:55:02] Buffer: 2 Anker validiert.
+[20.02. 09:56:02] Buffer: 3 Anker validiert.
+[20.02. 09:57:03] Buffer: 1 Anker validiert.
+[20.02. 09:58:02] Buffer: 1 Anker validiert.
