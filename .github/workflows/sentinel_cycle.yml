@@ -1,17 +1,18 @@
-name: Aureum Sentinel V99 - Master Injection
+name: Aureum Sentinel V100 - Hard-Refresh Live
 
 on:
   schedule:
-    - cron: '*/15 * * * *' # Alle 15 Min für konstanten Datenfluss
-  workflow_dispatch:
+    - cron: '0 */2 * * *' # Startet alle 2 Stunden neu
+  workflow_dispatch:      # Manueller Start für sofortigen Liveticker
 
 permissions:
   contents: write
 
 jobs:
-  master_injection:
+  hard_refresh_ticker:
     runs-on: ubuntu-latest
-    timeout-minutes: 30 # Maximaler Puffer für den 100er Batch-Merge
+    # Wir geben dem Job 125 Minuten (2 Stunden Ticker + 5 Min Sync-Zeit)
+    timeout-minutes: 125 
     
     steps:
       - name: 📥 Checkout Repository
@@ -25,27 +26,28 @@ jobs:
           python-version: '3.10'
           cache: 'pip'
 
-      - name: 📦 Install Financial Toolkit
+      - name: 📦 Install Requirements
         run: |
           pip install --upgrade pip
           pip install pandas pyarrow yfinance requests
 
-      - name: 🚀 Run Master Injection (V99)
+      - name: 🛰️ Run Aureum Sentinel (Hard-Refresh Mode)
+        # Wir setzen PYTHONUNBUFFERED=1, damit du die Ticks ECHTZEIT im GitHub Log siehst
+        env:
+          PYTHONUNBUFFERED: 1
         run: python sentinel_master.py
         continue-on-error: true 
 
-      - name: 🔄 Atomic Multi-Asset Sync
+      - name: 💾 Final Heritage Vault Sync
         if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
           
-          # Wir nutzen einen Wildcard-Add für den Heritage Vault
-          git add heritage_vault/*.parquet isin_pool.json vault_status.txt || true
+          # Archivieren der während des Laufs gefestigten Ankerpunkte
+          git add heritage_vault/*.parquet vault_status.txt || true
           
-          # Dynamischer Commit mit Asset-Zähler
-          git commit -m "🚀 V99: Master Injection & Seamless Splice [$(date +'%d.%m.%Y %H:%M')]" || echo "Keine neuen Daten"
+          git commit -m "🛡️ Aureum Sentinel: 2h Hard-Refresh Cycle Complete [$(date +'%d.%m.%Y %H:%M')]" || echo "Keine signifikanten Änderungen"
           
-          # Schutz vor parallelen Pushes
           git pull --rebase origin main
           git push origin main
