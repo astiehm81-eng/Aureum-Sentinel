@@ -4,16 +4,70 @@ import os, json, time, glob
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 
-# --- EISERNER STANDARD V82 (GAP-AUDIT & CLEAN-SYNC) ---
+# --- EISERNER STANDARD V83 (TICKER TRANSLATOR) ---
 HERITAGE_DIR = "heritage_vault"
 POOL_FILE = "isin_pool.json"
 HUMAN_REPORT = "vault_status.txt"
 BLACKLIST_FILE = "dead_assets.json"
-MAX_WORKERS = 25 
+MAX_WORKERS = 30 
 START_TIME = time.time()
 
-def run_gap_audit(pool, blacklist):
-    """Analysiert den Bestand und findet Lücken."""
+# Yahoo-Suffix Map für saubere Abfragen
+SUFFIX_MAP = {
+    "DE": ".DE", # XETRA
+    "US": "",    # NASDAQ/NYSE (kein Suffix)
+    "FR": ".PA", # Paris
+    "UK": ".L",  # London
+    "JP": ".T",  # Tokyo
+    "CH": ".SW"  # Schweiz
+}
+
+def clean_ticker(sym):
+    """Übersetzt Asset-Namen in Yahoo-konforme Ticker."""
+    # Entferne $ Zeichen aus deinem Log
+    sym = sym.replace("$", "").strip()
+    
+    # Wenn ein Punkt vorhanden ist (z.B. AAPL.DE), suffix korrigieren
+    if "." in sym:
+        base, region = sym.split(".", 1)
+        suffix = SUFFIX_MAP.get(region.upper(), f".{region}")
+        return f"{base}{suffix}"
+    
+    return sym
+
+def fetch_with_retry(asset):
+    original_id = asset['symbol']
+    target_ticker = clean_ticker(original_id)
+    
+    try:
+        t = yf.Ticker(target_ticker)
+        # Wir versuchen erst die Historie
+        df = t.history(period="max")
+        
+        # Fallback: Wenn max nicht geht, versuche die letzten 5 Jahre
+        if df.empty:
+            df = t.history(period="5y")
+            
+        if not df.empty:
+            df = df.reset_index()
+            df = df[['Date', 'Close']].rename(columns={'Close': 'Price'})
+            df['Date'] = pd.to_datetime(df['Date']).dt.tz_localize(None).dt.strftime('%Y-%m-%d')
+            df['Ticker'] = original_id # Speichern unter deiner Pool-ID
+            return df, None
+    except Exception as e:
+        pass
+    
+    return None, original_id
+
+def run_v83():
+    if not os.path.exists(POOL_FILE): return
+    with open(POOL_FILE, 'r') as f: pool = json.load(f)
+    
+    blacklist = []
+    if os.path.exists(BLACKLIST_FILE):
+        with open(BLACKLIST_FILE, 'r') as f: blacklist = json.load(f)
+
+    # 1. Audit: Was fehlt?
     existing_tickers = set()
     if os.path.exists(HERITAGE_DIR):
         for f in glob.glob(f"{HERITAGE_DIR}/*.parquet"):
@@ -21,47 +75,17 @@ def run_gap_audit(pool, blacklist):
                 df = pd.read_parquet(f, columns=['Ticker'])
                 existing_tickers.update(df['Ticker'].unique())
             except: continue
-    
-    # Lücken: Im Pool, aber nicht im Archiv und nicht auf der Blacklist
+
     missing = [a for a in pool if a['symbol'] not in existing_tickers and a['symbol'] not in blacklist]
-    return missing, existing_tickers
+    print(f"📡 V83: Starte Übersetzung für {len(missing)} Lücken.")
 
-def fetch_and_fix(asset):
-    """Versucht Daten zu holen und korrigiert Ticker-Formate."""
-    sym = asset['symbol']
-    # Versuche: Original, ohne .US, mit .DE (falls zutreffend)
-    variants = [sym, sym.replace(".US", "")]
-    
-    for s in variants:
-        try:
-            ticker = yf.Ticker(s)
-            df = ticker.history(period="max")
-            if df is not None and not df.empty:
-                df = df.reset_index()
-                df = df[['Date', 'Close']].rename(columns={'Close': 'Price'})
-                df['Date'] = pd.to_datetime(df['Date']).dt.tz_localize(None).dt.strftime('%Y-%m-%d')
-                df['Ticker'] = sym # Immer unter Original-ID speichern
-                return df, None
-        except: continue
-    return None, sym
-
-def run_v82():
-    if not os.path.exists(POOL_FILE): return
-    with open(POOL_FILE, 'r') as f: pool = json.load(f)
-    blacklist = []
-    if os.path.exists(BLACKLIST_FILE):
-        with open(BLACKLIST_FILE, 'r') as f: blacklist = json.load(f)
-
-    # 1. Audit & Gap-Analyse
-    missing, archived = run_gap_audit(pool, blacklist)
-    print(f"🔍 Audit: {len(archived)} im Vault, {len(missing)} fehlen.")
-
-    # 2. Gezieltes Auffüllen (140 Sek Laufzeit)
+    # 2. Parallel Fetch mit korrigierter Syntax
     new_data = []
     new_dead = []
     
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
-        futures = [ex.submit(fetch_and_fix, a) for a in missing[:60]]
+        # Verarbeite 100 Assets pro Lauf
+        futures = [ex.submit(fetch_with_retry, a) for a in missing[:100]]
         for f in futures:
             res, dead = f.result()
             if res is not None: new_data.append(res)
@@ -79,15 +103,16 @@ def run_v82():
                 to_save = pd.concat([old, to_save]).drop_duplicates(subset=['Ticker', 'Date'])
             to_save.to_parquet(path, engine='pyarrow', index=False)
 
-    # 4. Blacklist & Reporting
+    # 4. Blacklist-Schutz
     if new_dead:
-        blacklist = list(set(blacklist + new_dead))
-        with open(BLACKLIST_FILE, 'w') as f: json.dump(blacklist, f)
+        # Nur auf Blacklist, wenn es wirklich $ASSET_... Platzhalter sind
+        blacklist.extend([d for d in new_dead if "ASSET_" in d])
+        with open(BLACKLIST_FILE, 'w') as f: json.dump(list(set(blacklist)), f)
 
-    total_count = len(archived) + len(new_data)
+    # Status Report
+    total = len(existing_tickers) + len(new_data)
     with open(HUMAN_REPORT, "w", encoding="utf-8") as f:
-        f.write(f"🛡️ AUREUM SENTINEL V82\n📅 {datetime.now().strftime('%H:%M:%S')}\n" + 
-                "="*30 + 
-                f"\n📊 Abdeckung: {(total_count/len(pool))*100:.2f}%\n✅ Assets: {total_count}\n💀 Blacklist: {len(blacklist)}")
+        f.write(f"🛡️ AUREUM SENTINEL V83\n📊 Abdeckung: {(total/len(pool))*100:.2f}%\n✅ Archiviert: {total}\n💀 Blacklist: {len(blacklist)}")
 
-if __name__ == "__main__": run_v82()
+if __name__ == "__main__":
+    run_v83()
