@@ -4,7 +4,7 @@ import os
 import yfinance as yf
 from datetime import datetime
 
-# --- KONFIGURATION (V108.5 FINDER-AGENT) ---
+# --- KONFIGURATION (V108.6 FINDER-AGENT) ---
 genai.configure(api_key="DEIN_GEMINI_API_KEY")
 model = genai.GenerativeModel('gemini-pro')
 
@@ -21,17 +21,15 @@ def verify_ticker(symbol):
     try:
         t = yf.Ticker(symbol)
         info = t.history(period="1d")
-        return not info.empty
+        if not info.empty:
+            print(f"  [VERIFIED] {symbol} ist aktiv.", flush=True)
+            return True
+        return False
     except:
         return False
 
 def search_tickers_with_gemini(sector_query):
-    prompt = f"""
-    Agiere als Finanzdaten-Spezialist. Erstelle eine Liste von Yahoo Finance Tickern 
-    für: {sector_query}.
-    Die Ticker müssen das Format für Deutschland (z.B. SAP.DE) oder USA (z.B. AAPL) haben.
-    Antworte NUR im JSON-Format: [{"symbol": "TICKER"}, ...]
-    """
+    prompt = f"Erstelle eine Liste von Yahoo Finance Tickern für: {sector_query}. Antworte NUR im JSON-Format: [{{'symbol': 'TICKER'}}, ...]"
     try:
         response = model.generate_content(prompt)
         raw_text = response.text.strip()
@@ -44,13 +42,13 @@ def search_tickers_with_gemini(sector_query):
 
 def update_isin_pool(new_assets):
     if os.path.exists(POOL_FILE):
-        with open(POOL_FILE, "r") as f:
-            pool = json.load(f)
-    else:
-        pool = []
+        with open(POOL_FILE, "r") as f: pool = json.load(f)
+    else: pool = []
     
     existing_symbols = {a['symbol'] for a in pool}
     added_count = 0
+    print(f"Starte Verifizierung von {len(new_assets)} potenziellen Assets...", flush=True)
+    
     for asset in new_assets:
         sym = asset['symbol']
         if sym not in existing_symbols:
@@ -58,6 +56,7 @@ def update_isin_pool(new_assets):
                 pool.append(asset)
                 existing_symbols.add(sym)
                 added_count += 1
+    
     with open(POOL_FILE, "w") as f:
         json.dump(pool, f, indent=4)
     update_status(f"Pool-Update: +{added_count} Assets. Gesamt: {len(pool)}")
