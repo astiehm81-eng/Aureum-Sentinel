@@ -1,16 +1,16 @@
 name: Aureum Sentinel Perpetual Loop
 on:
   schedule:
-    - cron: '*/20 * * * *'
-  workflow_dispatch:
-  repository_dispatch:
+    - cron: '*/20 * * * *' # Startet alle 20 Minuten
+  workflow_dispatch:      # Ermöglicht manuellen Start
+  repository_dispatch:    # Ermöglicht den Loop durch Re-Trigger
     types: [next_cycle]
 
 jobs:
   sentinel-cycle:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write # Erforderlich, um Daten in das Repo zu pushen
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -26,28 +26,28 @@ jobs:
         run: |
           pip install pandas yfinance pyarrow fastparquet google-generativeai
 
-      - name: Step 1: Run Finder (Growth Engine)
-        # Sucht neue Assets und befüllt die isin_pool.json
+      - name: Step 1: Growth Engine (Finder)
+        # Sucht neue Ticker und erweitert die isin_pool.json
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python aureum_gemini_finder.py
 
-      - name: Step 2: Run Sentinel (Monitoring Engine)
-        # Überwacht den (nun gewachsenen) Pool für 15 Minuten
+      - name: Step 2: Monitoring Engine (Sentinel)
+        # Führt erst Heritage-Heal (B) und dann Live-Puls (A) aus
         run: python aureum_sentinel.py
 
       - name: Step 3: Secure Data Sync & Snapshot
-        # Speichert alle Fortschritte (neue ISINs, Anker, Heritage-Daten)
+        # Sichert alle Änderungen (Pool-Wachstum, Anker, Parquet-Files)
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel"
           git pull --rebase origin main
           git add heritage_vault/*.parquet anchors_memory.json vault_status.txt AUREUM_SNAPSHOT.txt isin_pool.json
-          git commit -m "Cycle-Update: Pool +31 & Rohdaten [skip ci]" || echo "No changes"
+          git commit -m "Cycle-Update: Pool & Heritage Sync [skip ci]" || echo "No changes"
           git push
 
-      - name: Step 4: Auto Re-Trigger
-        # Startet den nächsten Zyklus sofort
+      - name: Step 4: Perpetual Loop Trigger
+        # Triggert den nächsten Durchlauf für lückenlose Überwachung
         run: |
           curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
           -H "Accept: application/vnd.github.v3+json" \
