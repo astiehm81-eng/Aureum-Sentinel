@@ -1,51 +1,52 @@
-name: Aureum Sentinel V95 - Heritage Fusion
+name: Aureum Sentinel V98 - Seamless Splice
 
 on:
   schedule:
-    - cron: '*/15 * * * *' # Alle 15 Min (etwas mehr Puffer für Fusion-Logik)
+    - cron: '*/20 * * * *' # Alle 20 Min (Optimal für Overlap-Berechnungen)
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  fusion_sync:
+  splice_sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 20 # Erhöht für Deep-Merge Prozesse
+    timeout-minutes: 25 # Erhöht für präzise Merge-Operationen
     
     steps:
-      - name: 📥 Checkout
+      - name: 📥 Checkout Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: 🐍 Setup Python
+      - name: 🐍 Setup Python 3.10
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
           cache: 'pip'
 
-      - name: 📦 Install Requirements
+      - name: 📦 Install Financial Toolkit
         run: |
           pip install --upgrade pip
           pip install pandas pyarrow yfinance requests
 
-      - name: 🧬 Run Heritage Fusion
+      - name: 🧬 Run Seamless Splice (V98)
         run: python sentinel_master.py
+        # Wir lassen das Skript durchlaufen, auch wenn einzelne Assets Fehler werfen
         continue-on-error: true 
 
-      - name: 💾 Persistence Layer
+      - name: 🔄 Atomic Archive Sync
         if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
           
-          # Sicherstellen, dass neue Parquet-Dateien im Vault erfasst werden
-          git add heritage_vault/*.parquet vault_status.txt || true
+          # Sicherstellen, dass die neuen Parquet-Files im Heritage Vault landen
+          git add heritage_vault/*.parquet isin_pool.json vault_status.txt || true
           
-          # Commit mit Zusammenfassung
-          git commit -m "🧬 V95: Heritage Fusion Update [$(date +'%d.%m.%Y %H:%M')]" || echo "Keine Änderungen"
+          # Commit nur bei echten Datenänderungen
+          git commit -m "🧬 V98 Splice: Yahoo (7d) + Stooq History [$(date +'%d.%m.%Y %H:%M')]" || echo "Keine Änderungen"
           
-          # Rebase & Push (Essential für parallele Läufe)
+          # Rebase & Push um Konflikte zu vermeiden
           git pull --rebase origin main
           git push origin main
