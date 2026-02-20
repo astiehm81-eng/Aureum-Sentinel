@@ -15,7 +15,6 @@ jobs:
     permissions:
       contents: write
     
-    # Globales Environment für alle Steps in diesem Job
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GOOGLE_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -35,17 +34,19 @@ jobs:
         run: pip install pandas yfinance pyarrow fastparquet google-genai requests
 
       - name: 🛡️ Phase 1 & 2 - Aureum Sentinel
-        # Hier noch einmal explizit gemappt
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python -u aureum_sentinel.py
+        run: python aureum_sentinel.py
 
       - name: 💾 Phase 3 - Datenbank-Sync & Commit
         if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel"
-          git pull --rebase origin main
+          # WICHTIG: Erst adden, damit Git die Änderungen kennt
           git add heritage_vault/*.parquet anchors_memory.json isin_pool.json coverage_report.txt || true
+          # Änderungen temporär parken, pullen und wiederholen (Stash-Pop)
+          git stash || echo "Nichts zum Stashen"
+          git pull --rebase origin main
+          git stash pop || echo "Nichts zum Wiederherstellen"
+          git add .
           git commit -m "Cycle-Update: $(date +'%H:%M') [skip ci]" || echo "No changes"
           git push origin main
