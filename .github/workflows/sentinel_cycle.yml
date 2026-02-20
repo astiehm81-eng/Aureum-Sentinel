@@ -1,4 +1,4 @@
-name: Aureum Sentinel V78 - Final Sync
+name: Aureum Sentinel V80 - Gap Audit
 
 on:
   schedule:
@@ -23,27 +23,16 @@ jobs:
           python-version: '3.10'
 
       - name: Install
-        run: pip install pandas pandas-datareader pyarrow yfinance numpy
+        run: pip install pandas pyarrow yfinance
 
-      - name: Run V78
+      - name: Run V80 Master
         run: python sentinel_master.py
 
-      - name: Atomic Push & Resolve
+      - name: Atomic Sync
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Aureum Sentinel Bot"
-          
-          # 1. Änderungen "verstauen" (Stash)
-          git add isin_pool.json vault_status.txt heritage_vault/*.parquet
-          git stash
-          
-          # 2. Repo auf den neuesten Stand bringen
+          git add vault_status.txt missing_assets.json heritage_vault/*.parquet
+          git commit -m "V80: Gap Audit & Smart-Fill [$(date)]" || echo "No changes"
           git pull --rebase origin main
-          
-          # 3. Änderungen wieder herausholen
-          git stash pop || echo "No conflicts"
-          
-          # 4. Jetzt final committen und hochladen
-          git add isin_pool.json vault_status.txt heritage_vault/*.parquet
-          git commit -m "V78: Reliable Collection [$(date)]" || echo "No changes"
           git push origin main
