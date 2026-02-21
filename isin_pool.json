@@ -9145,5 +9145,25 @@
     {
         "symbol": "DOCS",
         "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ALB.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ALB.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ALB.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ALB.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AVGO.F",
+        "last_sync": "1900-01-01"
     }
 ]
