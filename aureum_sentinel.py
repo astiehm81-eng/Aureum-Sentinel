@@ -10,7 +10,7 @@ import random
 import time
 from datetime import datetime
 
-# --- KONFIGURATION ---
+# --- KONFIGURATION EISERNER STANDARD ---
 HERITAGE_ROOT = "heritage/"
 AUDIT_FILE = "heritage/heritage_audit.txt"
 POOL_FILE = "isin_pool.json"
@@ -22,20 +22,22 @@ class AureumInspector:
         self.root = root_path
         self.lock = threading.Lock()
         self.audit_lock = threading.Lock()
-        self.stats = {"success": 0, "error": 0, "data_points": 0}
+        self.stats = {"success": 0, "error": 0, "data_points": 0, "skips": 0}
         
-        # Audit Datei initialisieren
         os.makedirs(self.root, exist_ok=True)
-        with open(AUDIT_FILE, "a") as f:
-            f.write(f"\n--- SESSION START: {datetime.now()} ---\n")
+        self._write_audit(f"\n{'='*60}\nSESSION START: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n{'='*60}\n")
 
-    def log_to_audit(self, ticker, status, message):
-        """Schreibt in die persistente heritage_audit.txt"""
-        ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        line = f"[{ts}] {ticker:8} | {status:10} | {message}\n"
+    def _write_audit(self, message):
         with self.audit_lock:
-            with open(AUDIT_FILE, "a") as f:
-                f.write(line)
+            with open(AUDIT_FILE, "a", encoding="utf-8") as f:
+                f.write(message)
+
+    def log_event(self, level, ticker, message, to_file=True):
+        ts = datetime.now().strftime('%H:%M:%S')
+        log_line = f"[{ts}] [{level:9}] {ticker:8} | {message}"
+        print(log_line, flush=True) # Konsole für GitHub Actions
+        if to_file:
+            self._write_audit(log_line + "\n")
 
     def _normalize(self, df):
         t_col = 'Date' if 'Date' in df.columns else ('Datetime' if 'Datetime' in df.columns else None)
@@ -49,6 +51,8 @@ class AureumInspector:
             try:
                 df, t_col = self._normalize(df.copy())
                 if df.empty: return
+                if 'Ticker' not in df.columns: df['Ticker'] = ticker
+                
                 path = os.path.join(self.root, filename)
                 os.makedirs(os.path.dirname(path), exist_ok=True)
 
@@ -58,16 +62,14 @@ class AureumInspector:
                         old[t_col] = pd.to_datetime(old[t_col], utc=True, errors='coerce').dt.tz_localize(None)
                     df = pd.concat([old, df]).drop_duplicates(subset=[t_col, 'Ticker'])
 
-                if fmt == "parquet": 
-                    df.to_parquet(path, compression='snappy', index=False)
-                else: 
-                    df.to_feather(path)
+                if fmt == "parquet": df.to_parquet(path, compression='snappy', index=False)
+                else: df.to_feather(path)
                 
                 self.stats["success"] += 1
                 self.stats["data_points"] += len(df)
             except Exception as e:
                 self.stats["error"] += 1
-                self.log_to_audit(ticker, "DISK-ERR", str(e))
+                self.log_event("DSK-ERR", ticker, f"Speicherfehler in {filename}: {e}")
 
 inspector = AureumInspector(HERITAGE_ROOT)
 
@@ -78,45 +80,44 @@ class AureumSentinel:
     def load_pool(self):
         if os.path.exists(POOL_FILE):
             with open(POOL_FILE, "r") as f: raw = json.load(f)
-            # Ticker-Cleanup
-            for a in raw:
-                a['symbol'] = a['symbol'].replace('.MC.MC', '.MC')
+            for a in raw: a['symbol'] = a['symbol'].replace('.MC.MC', '.MC')
             self.pool = raw
             self.pool.sort(key=lambda x: x.get('last_sync', '1900-01-01'))
+            inspector.log_event("AUDIT", "SYSTEM", f"Pool geladen: {len(self.pool)} Assets.", to_file=False)
         else: self.pool = []
 
     def fetch_stooq(self, ticker):
         st_ticker = ticker if "." in ticker else f"{ticker.upper()}.US"
         with STOOQ_SEMAPHORE:
-            time.sleep(random.uniform(0.06, 0.12))
+            time.sleep(random.uniform(0.07, 0.15))
             try:
                 r = requests.get(f"https://stooq.com/q/d/l/?s={st_ticker}&i=d", timeout=5)
                 if len(r.content) > 300:
-                    return pd.read_csv(io.StringIO(r.text), index_col='Date', parse_dates=True).reset_index()
+                    df = pd.read_csv(io.StringIO(r.text), index_col='Date', parse_dates=True).reset_index()
+                    inspector.log_event("STOOQ-OK", ticker, f"Heritage erhalten ({len(df)} Zeilen)")
+                    return df
             except: pass
             return None
 
     def worker_task(self, asset):
         ticker = asset['symbol']
+        inspector.log_event("START", ticker, "Sync initiiert")
         try:
             stock = yf.Ticker(ticker)
             live = stock.history(period="5d", interval="5m").reset_index()
             
             if live.empty:
-                inspector.log_to_audit(ticker, "SKIPPED", "No Yahoo Data (Delisted?)")
+                inspector.log_event("SKIP", ticker, "Yahoo liefert keine Daten (Delisted?)")
+                inspector.stats["skips"] += 1
                 return {"ticker": ticker, "status": "EMPTY"}
 
-            price = live['Close'].iloc[-1]
+            inspector.log_event("YAHOO-OK", ticker, f"Live-Kurs: {live['Close'].iloc[-1]:.2f}")
             gap = stock.history(period="1mo", interval="1d").reset_index()
             hist = self.fetch_stooq(ticker)
             
-            # Audit Erfolg loggen
-            hist_msg = f"Stooq: {len(hist)} rows" if hist is not None else "Stooq: No Data"
-            inspector.log_to_audit(ticker, "SUCCESS", f"Price: {price:.2f} | {hist_msg}")
-            
             return {"ticker": ticker, "live": live, "gap": gap, "hist": hist, "status": "OK"}
         except Exception as e:
-            inspector.log_to_audit(ticker, "ERROR", str(e))
+            inspector.log_event("ERROR", ticker, f"Systemfehler: {e}")
             return {"ticker": ticker, "status": "ERROR"}
 
     def orchestrate(self, res):
@@ -129,22 +130,35 @@ class AureumSentinel:
 
         inspector.save(res['live'], "live_ticker.feather", ticker, fmt="feather")
         if res['hist'] is not None:
-            h, g = res['hist'].copy(), res['gap'].copy()
-            h['Date'] = pd.to_datetime(h['Date'], utc=True).dt.tz_localize(None)
-            g['Date'] = pd.to_datetime(g['Date'], utc=True).dt.tz_localize(None)
-            combined = pd.concat([h, g]).drop_duplicates(subset=['Date'])
-            for year, group in combined.groupby(combined['Date'].dt.year):
-                inspector.save(group, f"{(int(year)//10)*10}s/heritage_{int(year)}.parquet", ticker)
+            try:
+                h, g = res['hist'].copy(), res['gap'].copy()
+                h['Date'] = pd.to_datetime(h['Date'], utc=True).dt.tz_localize(None)
+                g['Date'] = pd.to_datetime(g['Date'], utc=True).dt.tz_localize(None)
+                combined = pd.concat([h, g]).drop_duplicates(subset=['Date'])
+                for year, group in combined.groupby(combined['Date'].dt.year):
+                    inspector.save(group, f"{(int(year)//10)*10}s/heritage_{int(year)}.parquet", ticker)
+            except Exception as e:
+                inspector.log_event("ORCH-ERR", ticker, f"Marriage failed: {e}")
 
     def run(self):
-        print(f"=== AUREUM SENTINEL V223 | AUDIT FILE ENABLED ===")
+        start_time = time.time()
+        inspector.log_event("SESSION", "START", "Turbo Auditor Pipeline aktiv.")
+        
         batch = self.pool[:5000]
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             futures = [executor.submit(self.worker_task, a) for a in batch]
             for f in concurrent.futures.as_completed(futures):
                 self.orchestrate(f.result())
+
         with open(POOL_FILE, "w") as f: json.dump(self.pool, f, indent=4)
-        print(f"=== ZYKLUS BEENDET | Audit gespeichert in {AUDIT_FILE} ===")
+        
+        duration = (time.time() - start_time) / 60
+        summary = (f"\n{'='*60}\nFINAL SUMMARY\n"
+                   f"Dauer: {duration:.2f} Min\n"
+                   f"Erfolge: {inspector.stats['success']} | Skips: {inspector.stats['skips']} | Fehler: {inspector.stats['error']}\n"
+                   f"Datenpunkte gesamt: {inspector.stats['data_points']}\n{'='*60}\n")
+        inspector._write_audit(summary)
+        print(summary)
 
 if __name__ == "__main__":
     AureumSentinel().run()
