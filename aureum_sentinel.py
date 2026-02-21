@@ -6,15 +6,16 @@ import os
 import json
 import concurrent.futures
 import threading
+import random
 from datetime import datetime
 
-# --- HOCHLEISTUNGS-KONFIGURATION ---
+# --- SETTINGS ---
 HERITAGE_ROOT = "heritage/"
 LIVE_TICKER_FEATHER = "heritage/live_ticker.feather"
 POOL_FILE = "isin_pool.json"
 AUDIT_FILE = "heritage_audit.txt"
-MAX_WORKERS = 20  # Worker hochgefahren
-storage_lock = threading.Lock() # Globaler Schutz gegen Race-Conditions
+MAX_WORKERS = 20 # Wieder hochgefahren, da Multi-Level-Storage Schreiblast verteilt
+storage_lock = threading.Lock()
 
 class AureumSentinel:
     def __init__(self):
@@ -24,126 +25,118 @@ class AureumSentinel:
 
     def load_pool(self):
         if os.path.exists(POOL_FILE):
-            with open(POOL_FILE, "r") as f: 
-                self.pool = json.load(f)
-            # Priorisierung: Assets, die am längsten kein Update hatten
-            self.pool.sort(key=lambda x: x.get('last_sync', '1900-01-01'))
-        else: 
-            self.pool = []
+            with open(POOL_FILE, "r") as f: self.pool = json.load(f)
+        else: self.pool = []
 
-    def log_market(self, ticker, price, status):
-        ts = datetime.now().strftime('%H:%M:%S')
-        icon = "✅" if status == "FULL" else "⚠️"
-        print(f"[{ts}] {icon} {ticker:8} | Preis: {price:10.2f} | Status: {status}")
+    def expand_pool_via_wiki(self):
+        """Erweitert den Pool organisch via Wikipedia (S&P 500, DAX, etc.)"""
+        urls = [
+            "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
+            "https://en.wikipedia.org/wiki/DAX",
+            "https://en.wikipedia.org/wiki/NASDAQ-100"
+        ]
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        new_found = 0
+        for url in urls:
+            try:
+                r = requests.get(url, headers=headers)
+                tables = pd.read_html(io.StringIO(r.text))
+                for df in tables:
+                    for col in ['Symbol', 'Ticker', 'Ticker symbol']:
+                        if col in df.columns:
+                            for sym in df[col].astype(str).unique():
+                                sym = sym.replace('.', '-') # Yahoo Format
+                                if not any(a['symbol'] == sym for a in self.pool):
+                                    self.pool.append({"symbol": sym, "last_sync": "1900-01-01"})
+                                    new_found += 1
+            except: continue
+        print(f"[WIKI] {new_found} neue Assets gefunden. Pool-Größe: {len(self.pool)}")
 
-    def fetch_worker_task(self, asset):
-        """Worker-Logik: Daten sammeln (Kein Schreiben)"""
+    def fetch_task(self, asset):
         ticker = asset['symbol']
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0'}
+        stooq_ticker = ticker.upper() if "." in ticker else f"{ticker.upper()}.US"
+        headers = {'User-Agent': f'Aureum-Bot-{random.randint(1,1000)}'}
         
-        live_5m, gap_fill_1d, hist_df = None, None, None
-        current_price = 0.0
-        stooq_status = "❌"
-
+        live_5m, gap_1d, hist_df = None, None, None
+        price = 0.0
+        
         try:
-            # 1. Yahoo (Live & Gap)
+            # Yahoo
             stock = yf.Ticker(ticker)
-            live_5m = stock.history(period="7d", interval="5m")
-            gap_fill_1d = stock.history(period="1mo", interval="1d")
-            if not live_5m.empty:
-                current_price = live_5m['Close'].iloc[-1]
+            live_5m = stock.history(period="5d", interval="5m")
+            gap_1d = stock.history(period="1mo", interval="1d")
+            if not live_5m.empty: price = live_5m['Close'].iloc[-1]
 
-            # 2. Stooq (Heimatmarkt)
-            r = requests.get(f"https://stooq.com/q/d/l/?s={ticker.lower()}&i=d", headers=headers, timeout=5)
-            if len(r.content) > 200:
+            # Stooq
+            r = requests.get(f"https://stooq.com/q/d/l/?s={stooq_ticker}&i=d", headers=headers, timeout=5)
+            if len(r.content) > 300:
                 hist_df = pd.read_csv(io.StringIO(r.text), index_col='Date', parse_dates=True)
-                stooq_status = "✅"
-        except Exception as e:
-            pass
+        except: pass
 
-        status = "FULL" if (stooq_status == "✅" and current_price > 0) else "PARTIAL"
-        self.log_market(ticker, current_price, status)
-        
-        return {
-            "ticker": ticker, "price": current_price, "hist": hist_df, 
-            "live": live_5m, "gap": gap_fill_1d, "stooq": stooq_status
-        }
+        status = "FULL" if (hist_df is not None and price > 0) else "PARTIAL"
+        return {"ticker": ticker, "price": price, "hist": hist_df, "live": live_5m, "gap": gap_1d, "status": status}
 
-    def safe_storage_manager(self, res):
-        """Zentraler Manager: Nur ein Thread schreibt zur Zeit."""
-        if not res: return
-        
+    def safe_store(self, res):
+        if not res or res['price'] == 0: return
         with storage_lock:
-            ticker = res['ticker']
-            
-            # A. Live-Ticker (Feather)
-            if res['live'] is not None and not res['live'].empty:
-                df_live = res['live'].copy()
-                df_live['Ticker'] = ticker
-                self._atomic_save(df_live.reset_index(), LIVE_TICKER_FEATHER, "feather")
+            # 1. Live
+            if res['live'] is not None:
+                df_l = res['live'].copy()
+                df_l['Ticker'] = res['ticker']
+                self._write(df_l.reset_index(), LIVE_TICKER_FEATHER, "feather")
 
-            # B. Heritage Deep-Storage (Jahrzehnt-Ordner / Jahres-Parquet)
+            # 2. Heritage (Decade/Year)
             if res['hist'] is not None:
-                # Heirat Stooq + Yahoo Gap
-                combined = res['hist']
-                if res['gap'] is not None:
-                    combined = pd.concat([res['hist'], res['gap']]).sort_index()
-                    combined = combined[~combined.index.duplicated(keep='last')]
-                
-                # Partitionierung
+                combined = pd.concat([res['hist'], res['gap'] or pd.DataFrame()]).sort_index()
+                combined = combined[~combined.index.duplicated(keep='last')]
                 combined['Year'] = combined.index.year
                 combined['Decade'] = (combined['Year'] // 10) * 10
                 
-                for (decade, year), group in combined.groupby(['Decade', 'Year']):
-                    decade_dir = f"{HERITAGE_ROOT}{int(decade)}s/"
-                    os.makedirs(decade_dir, exist_ok=True)
-                    path = f"{decade_dir}heritage_{int(year)}.parquet"
-                    
-                    group = group.copy()
-                    group['Ticker'] = ticker
-                    self._atomic_save(group, path, "parquet")
+                for (dec, yr), group in combined.groupby(['Decade', 'Year']):
+                    path = f"{HERITAGE_ROOT}{int(dec)}s/heritage_{int(yr)}.parquet"
+                    os.makedirs(os.path.dirname(path), exist_ok=True)
+                    g = group.copy(); g['Ticker'] = res['ticker']
+                    self._write(g, path, "parquet")
 
-            # Update Sync-Timestamp im Pool
-            self.audit_logs.append(f"{ticker}: {res['price']} | Stooq: {res['stooq']}")
+            # Status Update
             for a in self.pool:
-                if a['symbol'] == ticker:
+                if a['symbol'] == res['ticker']:
                     a['last_sync'] = datetime.now().isoformat()
                     break
 
-    def _atomic_save(self, df, path, fmt):
-        """Sichert Dateiintegrität durch .tmp und .replace"""
-        if os.path.exists(path):
-            try:
+    def _write(self, df, path, fmt):
+        try:
+            if os.path.exists(path):
                 old = pd.read_parquet(path) if fmt == "parquet" else pd.read_feather(path)
-                combined = pd.concat([old, df])
-                # Deduplizierung über Ticker und Zeitstempel
-                idx = combined.index.name or ('Date' if 'Date' in combined.columns else 'Datetime')
-                combined = combined.reset_index().drop_duplicates(subset=[idx, 'Ticker']).set_index(idx)
-            except: combined = df
-        else: combined = df
-        
-        tmp = path + ".tmp"
-        if fmt == "parquet": combined.to_parquet(tmp)
-        else: combined.to_feather(tmp)
-        os.replace(tmp, path)
+                df = pd.concat([old, df])
+                t_col = 'Date' if 'Date' in df.columns else ('Datetime' if 'Datetime' in df.columns else df.index.name)
+                df = df.drop_duplicates(subset=[t_col, 'Ticker']) if t_col else df
+            
+            tmp = path + ".tmp"
+            if fmt == "parquet": df.to_parquet(tmp, compression='snappy')
+            else: df.to_feather(tmp)
+            os.replace(tmp, path)
+        except: pass
 
     def run(self):
-        print(f"=== AUREUM SENTINEL V202 | WORKER BOOST (20) START [{datetime.now()}] ===")
-        # Batch von 200 Assets für hohe Auslastung
-        batch = self.pool[:200]
+        print(f"=== AUREUM SENTINEL V204 | 10k+ SYNC START [{datetime.now()}] ===")
+        self.expand_pool_via_wiki()
         
+        # Sortiere: Am längsten nicht synchronisierte zuerst
+        self.pool.sort(key=lambda x: x.get('last_sync', '1900-01-01'))
+        
+        # Verarbeite alles, was möglich ist (Full Batch)
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            futures = [executor.submit(self.fetch_worker_task, a) for a in batch]
+            futures = [executor.submit(self.fetch_task, a) for a in self.pool[:12000]]
             for f in concurrent.futures.as_completed(futures):
-                self.safe_storage_manager(f.result())
+                res = f.result()
+                if res:
+                    self.safe_store(res)
+                    if random.random() < 0.05: # Nur 5% loggen um Runner-Log sauber zu halten
+                        print(f"[SYNC] {res['ticker']} - {res['status']}")
 
-        # Finales Pool-Update & Audit
         with open(POOL_FILE, "w") as f: json.dump(self.pool, f, indent=4)
-        with open(AUDIT_FILE, "w", encoding="utf-8") as f:
-            f.write(f"=== HERITAGE AUDIT {datetime.now()} ===\n")
-            f.write("\n".join(self.audit_logs))
-        
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Batch abgeschlossen.")
+        print(f"=== Zyklus beendet. Pool: {len(self.pool)} Assets ===")
 
 if __name__ == "__main__":
     AureumSentinel().run()
