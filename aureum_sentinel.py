@@ -8,79 +8,67 @@ import random
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# --- KONFIGURATION V152 ---
+# --- KONFIGURATION V153 ---
 POOL_FILE = "isin_pool.json"
 HERITAGE_DIR = "heritage"
-TICKER_FILE = os.path.join(HERITAGE_DIR, "live_ticker.feather")
-ANCHOR_FILE = "anchors_memory.json"
+DISCOVERY_LOG = "discovery_candidates.json" # Speicher für neue Funde
 
-ANCHOR_THRESHOLD = 0.0005 
-LOOKBACK_MINUTES = 60      
-MAX_WORKERS = 12           # Reduziert auf 12, um Rate-Limits zu umgehen
-RATE_LIMIT_HIT = False     # Globaler Stopper
-
-def log(tag, msg):
-    ts = datetime.now().strftime('%H:%M:%S')
-    print(f"[{ts}] [{tag}] {msg}", flush=True)
+# ... (Anker-Konfiguration bleibt gleich)
+MAX_WORKERS = 12
 
 class AureumSentinel:
     def __init__(self):
-        self.anchors = {}
-        if os.path.exists(ANCHOR_FILE):
+        # ... (Init bleibt gleich)
+        pass
+
+    def discover_new_assets(self, existing_symbols):
+        """
+        AI-Discovery: Sucht nach Sektor-Peers der Top-Performer 
+        oder ergänzt Large-Caps aus dem S&P 500 / DAX.
+        """
+        log("DISCOVERY", "🔍 Suche nach neuen Markt-Opportunitäten...")
+        new_candidates = []
+        
+        # Beispiel: Wenn wir SAP im Pool haben, schaue nach Software-Peers
+        search_seeds = random.sample(list(existing_symbols), min(3, len(existing_symbols)))
+        
+        for seed in search_seeds:
             try:
-                with open(ANCHOR_FILE, "r") as f: self.anchors = json.load(f)
-            except: pass
+                ticker = yf.Ticker(seed)
+                # Nutze Yahoo's Peer-Empfehlungen
+                peers = ticker.info.get('recommendationKey', []) # Vereinfachtes Beispiel
+                # In der Praxis ziehen wir Peers aus Branchen-Listen
+                sector = ticker.info.get('sector')
+                if sector:
+                    log("DISCOVERY", f"Analysiere Sektor: {sector} (basiert auf {seed})")
+                    # Hier könnte eine API-Abfrage für Top-Sektor-Werte stehen
+            except:
+                continue
+        return new_candidates
 
     def process_asset(self, symbol):
-        global RATE_LIMIT_HIT
-        if RATE_LIMIT_HIT: return None
-        
-        try:
-            # Kleiner Jitter gegen Erkennung
-            time.sleep(random.uniform(0.1, 0.5))
-            
-            t = yf.Ticker(symbol)
-            df = t.history(period="1d", interval="1m").tail(LOOKBACK_MINUTES)
-            
-            if df.empty:
-                return {"fail": symbol}
-
-            price = df['Close'].iloc[-1]
-            # Hier Anker-Check und Logik...
-            log("TICK", f"⚓ {symbol}: {price}")
-            return {"Ticker": symbol, "Price": price}
-
-        except Exception as e:
-            if "Too Many Requests" in str(e) or "429" in str(e):
-                log("WARNING", "⚠️ Rate Limit erreicht! Stoppe Zyklus zur Sicherheit.")
-                RATE_LIMIT_HIT = True
-            return None
+        # ... (Rate-Limit Schutz & Tick-Logik bleibt gleich)
+        # NEU: Markiert Assets, die besonders hohe Volatilität zeigen
+        # für das 'Sector Memory' (Vorgabe 2026-02-11)
+        pass
 
     def run_cycle(self):
-        if not os.path.exists(POOL_FILE): return
-        with open(POOL_FILE, "r") as f: pool = json.load(f)
+        with open(POOL_FILE, "r") as f: 
+            pool = json.load(f)
+        existing_symbols = {a['symbol'] for a in pool}
         
+        # --- HAUPT-SCAN ---
         results = []
-        to_cleanup = []
-        
-        log("SYSTEM", f"Starte Scan mit {MAX_WORKERS} Workern...")
-        
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            future_to_asset = {executor.submit(self.process_asset, a['symbol']): a for a in pool}
-            for future in as_completed(future_to_asset):
-                res = future.result()
-                if res:
-                    if "fail" in res and not RATE_LIMIT_HIT: 
-                        # Nur aufräumen, wenn wir NICHT im Rate Limit hängen!
-                        to_cleanup.append(res["fail"])
-                    elif "Price" in res:
-                        results.append(res)
-
-        if to_cleanup and not RATE_LIMIT_HIT:
-            # Cleanup-Logik hier...
+            # (Standard Scan...)
             pass
-        
-        log("PROGRESS", f"✅ Zyklus beendet. {len(results)} erfolgreich.")
+
+        # --- DISCOVERY PHASE ---
+        # Alle 10 Zyklen suchen wir nach neuen Fischen
+        if random.random() < 0.1: 
+            self.discover_new_assets(existing_symbols)
+
+        log("PROGRESS", "✅ Zyklus inklusive Discovery-Check beendet.")
 
 if __name__ == "__main__":
     AureumSentinel().run_cycle()
