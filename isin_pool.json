@@ -8457,5 +8457,693 @@
     {
         "symbol": "BWY",
         "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AXP.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AXP.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AXP.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AXP.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ALK.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ALK.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ALK.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ALK.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ALNY.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ALNY.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ALNY.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ALNY.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "NVO.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "NVO.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "NVO.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "NVO.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BIIB.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BIIB.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BIIB.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BIIB.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ELV.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ELV.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ELV.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ELV.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BA.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BA.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BA.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BA.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASLE.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASLE.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASLE.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASLE.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASPN.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASPN.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASPN.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASPN.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASND.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASND.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASND.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASND.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ATEN.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ATEN.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ATEN.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ATEN.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASRT.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASRT.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASRT.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASRT.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASRV.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASRV.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASRV.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASRV.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASH.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASH.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASH.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASH.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASIX.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASIX.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASIX.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASIX.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASTE.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASTE.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASTE.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASTE.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "NET.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "NET.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "NET.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "NET.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "OKTA.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "OKTA.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "OKTA.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "OKTA.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ASML.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SU.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SU.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SU.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SU.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SU",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SRE.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SRE.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SRE.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "STT.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "STT.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SWKS.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SWKS.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SWKS.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SWKS.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SWK.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SWK.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SWK.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SWK.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "TDG.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "TDG.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "TDG.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "TDG.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "STZ.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "STZ.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "STZ.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "STZ.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "STT.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "STT.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SO.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SO.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SO.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SO.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BGC.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BGC.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BGC.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BGC.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CMG.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CMG.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CMG.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CMG.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CNC.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CNC.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CNC.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CNC.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CPB.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CPB.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CPB.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CPB.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CCL.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CCL.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CCL.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CHRW.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CHRW.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CHRW.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CHRW.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CRL.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CRL.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CRL.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CRL.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CPT.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CPT.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CPT.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CPT.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CNP.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CNP.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CNP.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CNP.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ABDN.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ABDN.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ABDN.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ABDN",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CURY.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CURY.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CURY.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CURY",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "DLN.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "DLN.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "DLN.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "DLN",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "DSCV.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "DSCV.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "DSCV.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "DSCV",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "EWI.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "EWI.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "EWI.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "EWI",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ENOG.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ENOG.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ENOG.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ENOG",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "DRX.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "DRX.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "DRX.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "DRX",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "DOCS.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "DOCS.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "DOCS.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "DOCS",
+        "last_sync": "1900-01-01"
     }
 ]
