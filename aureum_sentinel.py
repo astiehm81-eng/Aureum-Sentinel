@@ -91,7 +91,7 @@ class AureumSentinel:
         try:
             # 1. Daten-Heirat (Immer Voll-Sync für Zeitreihen-Vervollständigung)
             with STOOQ_LOCK:
-                time.sleep(random.uniform(0.2, 0.4))
+                time.sleep(random.uniform(0.1, 0.2))
                 r = requests.get(f"https://stooq.com/q/d/l/?s={ticker}&i=d", timeout=7)
                 hist = pd.read_csv(io.StringIO(r.text)) if r.status_code == 200 else pd.DataFrame()
             
