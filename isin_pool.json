@@ -7677,5 +7677,785 @@
     {
         "symbol": "ZIG.L",
         "last_sync": "2026-02-21T18:50:43.253333"
+    },
+    {
+        "symbol": "BLK.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BLK.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BLK.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BLK.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BAX.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BAX.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BAX.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BAX.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AON.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AON.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AON.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AON.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BEN.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BEN.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BEN.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BEN.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BLDR.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BLDR.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BLDR.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BLDR.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BG.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BG.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BG.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BG.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "APD.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "APD.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "APD.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "APD.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AMP.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AMP.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AMP.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AMP.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BSX.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BSX.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BSX.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BSX.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AWK.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AWK.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AWK.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AWK.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AVO.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AVO.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AVO.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AVO.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ATRO.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ATRO.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ATRO.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ATRO.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AVNS.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AVNS.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AVNS.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AVNS.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AVB.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AVB.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AVB.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AVAV.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AVAV.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AVAV.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AVAV.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AVB.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AUDC.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AUDC.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AUDC.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AUDC.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AUPH.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AUPH.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AUPH.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AUPH.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AUB.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AUB.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AUB.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AUB.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AVNT.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AVNT.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AVNT.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AVNT.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "TEAM.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "TEAM.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "TEAM.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "TEAM.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SHOP.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SHOP.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SHOP.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SHOP.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SNOW.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SNOW.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SNOW.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SNOW.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "WDAY.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "WDAY.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "WDAY.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "WDAY.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ENI.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ENI.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ENI.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ENI.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ENI",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BABA.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BABA.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BABA.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BABA.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ROG.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ROG.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ROG.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ROG.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "ROG",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "GIVN.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "GIVN.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "GIVN.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "GIVN.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "GIVN",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "TMUS.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "TMUS.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "TMUS.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "TMUS.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "TRMB.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "TRMB.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "TRMB.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "TRMB.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SYY.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SYY.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SYY.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SYY.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "T.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "T.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "T.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "T.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "VICI.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "VICI.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "VICI.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "VICI.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "VMC.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "VMC.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "VMC.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "VMC.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "UBER.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "UBER.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "UBER.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "UBER.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SYK.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SYK.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SYK.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "SYK.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "VRTX.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "VRTX.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "VRTX.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "VRTX.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "VLO.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "VLO.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "VLO.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "VLO.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BHF.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BHF.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BHF.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BHF.L",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AIE.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AIE.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AIE.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "AIE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BYIT.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BYIT.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BYIT.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BYIT",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CCC.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CCC.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CCC.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CCC",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "DOM.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "DOM.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "DOM.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "DOM",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CKN.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CKN.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CKN.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CKN",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "DNLM.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "DNLM.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "DNLM.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "DNLM",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CWK.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CWK.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CWK.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CWK",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CCR.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CCR.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CCR.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "CCR",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BGFD.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BGFD.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BGFD.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BGFD",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BWY.DE",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BWY.F",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BWY.AS",
+        "last_sync": "1900-01-01"
+    },
+    {
+        "symbol": "BWY",
+        "last_sync": "1900-01-01"
     }
 ]
