@@ -16,7 +16,7 @@ AUDIT_FILE = "heritage_audit.txt"  # Deine lesbare Zusammenfassung
 
 ANCHOR_THRESHOLD = 0.0005 
 LOOKBACK_MINUTES = 60      
-MAX_WORKERS = 25        
+MAX_WORKERS = 12
 RATE_LIMIT_HIT = False
 
 def log(tag, msg):
