@@ -3367,5 +3367,1055 @@
     },
     {
         "symbol": "BNS"
+    },
+    {
+        "symbol": "COST"
+    },
+    {
+        "symbol": "1COV.DE"
+    },
+    {
+        "symbol": "DTG.DE"
+    },
+    {
+        "symbol": "DBK.DE"
+    },
+    {
+        "symbol": "ENR.DE"
+    },
+    {
+        "symbol": "B4B.DE"
+    },
+    {
+        "symbol": "WAF.DE"
+    },
+    {
+        "symbol": "KPN.AS"
+    },
+    {
+        "symbol": "ABI.BR"
+    },
+    {
+        "symbol": "NOKIA.HE"
+    },
+    {
+        "symbol": "ERIC-B.ST"
+    },
+    {
+        "symbol": "SMCI"
+    },
+    {
+        "symbol": "VRT"
+    },
+    {
+        "symbol": "DECK"
+    },
+    {
+        "symbol": "ANF"
+    },
+    {
+        "symbol": "U"
+    },
+    {
+        "symbol": "RBLX"
+    },
+    {
+        "symbol": "COIN"
+    },
+    {
+        "symbol": "DKNG"
+    },
+    {
+        "symbol": "HOOD"
+    },
+    {
+        "symbol": "SQ"
+    },
+    {
+        "symbol": "AAPL.DE"
+    },
+    {
+        "symbol": "AAPL.L"
+    },
+    {
+        "symbol": "AAPL.PA"
+    },
+    {
+        "symbol": "AAPL.AS"
+    },
+    {
+        "symbol": "AAPL.MI"
+    },
+    {
+        "symbol": "AAPL.MC"
+    },
+    {
+        "symbol": "AAPL.TO"
+    },
+    {
+        "symbol": "MSFT.DE"
+    },
+    {
+        "symbol": "MSFT.L"
+    },
+    {
+        "symbol": "MSFT.PA"
+    },
+    {
+        "symbol": "MSFT.AS"
+    },
+    {
+        "symbol": "MSFT.MI"
+    },
+    {
+        "symbol": "MSFT.MC"
+    },
+    {
+        "symbol": "MSFT.TO"
+    },
+    {
+        "symbol": "GOOGL.DE"
+    },
+    {
+        "symbol": "GOOGL.L"
+    },
+    {
+        "symbol": "GOOGL.PA"
+    },
+    {
+        "symbol": "GOOGL.AS"
+    },
+    {
+        "symbol": "GOOGL.MI"
+    },
+    {
+        "symbol": "GOOGL.MC"
+    },
+    {
+        "symbol": "GOOGL.TO"
+    },
+    {
+        "symbol": "AMZN.DE"
+    },
+    {
+        "symbol": "AMZN.L"
+    },
+    {
+        "symbol": "AMZN.PA"
+    },
+    {
+        "symbol": "AMZN.AS"
+    },
+    {
+        "symbol": "AMZN.MI"
+    },
+    {
+        "symbol": "AMZN.MC"
+    },
+    {
+        "symbol": "AMZN.TO"
+    },
+    {
+        "symbol": "NVDA.DE"
+    },
+    {
+        "symbol": "NVDA.L"
+    },
+    {
+        "symbol": "NVDA.PA"
+    },
+    {
+        "symbol": "NVDA.AS"
+    },
+    {
+        "symbol": "NVDA.MI"
+    },
+    {
+        "symbol": "NVDA.MC"
+    },
+    {
+        "symbol": "NVDA.TO"
+    },
+    {
+        "symbol": "META.DE"
+    },
+    {
+        "symbol": "META.L"
+    },
+    {
+        "symbol": "META.PA"
+    },
+    {
+        "symbol": "META.AS"
+    },
+    {
+        "symbol": "META.MI"
+    },
+    {
+        "symbol": "META.MC"
+    },
+    {
+        "symbol": "META.TO"
+    },
+    {
+        "symbol": "TSLA.DE"
+    },
+    {
+        "symbol": "TSLA.L"
+    },
+    {
+        "symbol": "TSLA.PA"
+    },
+    {
+        "symbol": "TSLA.AS"
+    },
+    {
+        "symbol": "TSLA.MI"
+    },
+    {
+        "symbol": "TSLA.MC"
+    },
+    {
+        "symbol": "TSLA.TO"
+    },
+    {
+        "symbol": "LLY.DE"
+    },
+    {
+        "symbol": "LLY.L"
+    },
+    {
+        "symbol": "LLY.PA"
+    },
+    {
+        "symbol": "LLY.AS"
+    },
+    {
+        "symbol": "LLY.MI"
+    },
+    {
+        "symbol": "LLY.MC"
+    },
+    {
+        "symbol": "LLY.TO"
+    },
+    {
+        "symbol": "V.DE"
+    },
+    {
+        "symbol": "V.L"
+    },
+    {
+        "symbol": "V.PA"
+    },
+    {
+        "symbol": "V.AS"
+    },
+    {
+        "symbol": "V.MI"
+    },
+    {
+        "symbol": "V.MC"
+    },
+    {
+        "symbol": "V.TO"
+    },
+    {
+        "symbol": "UNH.DE"
+    },
+    {
+        "symbol": "UNH.L"
+    },
+    {
+        "symbol": "UNH.PA"
+    },
+    {
+        "symbol": "UNH.AS"
+    },
+    {
+        "symbol": "UNH.MI"
+    },
+    {
+        "symbol": "UNH.MC"
+    },
+    {
+        "symbol": "UNH.TO"
+    },
+    {
+        "symbol": "AVGO.DE"
+    },
+    {
+        "symbol": "AVGO.L"
+    },
+    {
+        "symbol": "AVGO.PA"
+    },
+    {
+        "symbol": "AVGO.AS"
+    },
+    {
+        "symbol": "AVGO.MI"
+    },
+    {
+        "symbol": "AVGO.MC"
+    },
+    {
+        "symbol": "AVGO.TO"
+    },
+    {
+        "symbol": "MA.DE"
+    },
+    {
+        "symbol": "MA.L"
+    },
+    {
+        "symbol": "MA.PA"
+    },
+    {
+        "symbol": "MA.AS"
+    },
+    {
+        "symbol": "MA.MI"
+    },
+    {
+        "symbol": "MA.MC"
+    },
+    {
+        "symbol": "MA.TO"
+    },
+    {
+        "symbol": "JPM.DE"
+    },
+    {
+        "symbol": "JPM.L"
+    },
+    {
+        "symbol": "JPM.PA"
+    },
+    {
+        "symbol": "JPM.AS"
+    },
+    {
+        "symbol": "JPM.MI"
+    },
+    {
+        "symbol": "JPM.MC"
+    },
+    {
+        "symbol": "JPM.TO"
+    },
+    {
+        "symbol": "WMT.DE"
+    },
+    {
+        "symbol": "WMT.L"
+    },
+    {
+        "symbol": "WMT.PA"
+    },
+    {
+        "symbol": "WMT.AS"
+    },
+    {
+        "symbol": "WMT.MI"
+    },
+    {
+        "symbol": "WMT.MC"
+    },
+    {
+        "symbol": "WMT.TO"
+    },
+    {
+        "symbol": "XOM.DE"
+    },
+    {
+        "symbol": "XOM.L"
+    },
+    {
+        "symbol": "XOM.PA"
+    },
+    {
+        "symbol": "XOM.AS"
+    },
+    {
+        "symbol": "XOM.MI"
+    },
+    {
+        "symbol": "XOM.MC"
+    },
+    {
+        "symbol": "XOM.TO"
+    },
+    {
+        "symbol": "ORCL.DE"
+    },
+    {
+        "symbol": "ORCL.L"
+    },
+    {
+        "symbol": "ORCL.PA"
+    },
+    {
+        "symbol": "ORCL.AS"
+    },
+    {
+        "symbol": "ORCL.MI"
+    },
+    {
+        "symbol": "ORCL.MC"
+    },
+    {
+        "symbol": "ORCL.TO"
+    },
+    {
+        "symbol": "ADBE.DE"
+    },
+    {
+        "symbol": "ADBE.L"
+    },
+    {
+        "symbol": "ADBE.PA"
+    },
+    {
+        "symbol": "ADBE.AS"
+    },
+    {
+        "symbol": "ADBE.MI"
+    },
+    {
+        "symbol": "ADBE.MC"
+    },
+    {
+        "symbol": "ADBE.TO"
+    },
+    {
+        "symbol": "ASML.DE"
+    },
+    {
+        "symbol": "ASML.L"
+    },
+    {
+        "symbol": "ASML.PA"
+    },
+    {
+        "symbol": "ASML.MI"
+    },
+    {
+        "symbol": "ASML.MC"
+    },
+    {
+        "symbol": "ASML.TO"
+    },
+    {
+        "symbol": "COST.DE"
+    },
+    {
+        "symbol": "COST.L"
+    },
+    {
+        "symbol": "COST.PA"
+    },
+    {
+        "symbol": "COST.AS"
+    },
+    {
+        "symbol": "COST.MI"
+    },
+    {
+        "symbol": "COST.MC"
+    },
+    {
+        "symbol": "COST.TO"
+    },
+    {
+        "symbol": "PG.DE"
+    },
+    {
+        "symbol": "PG.L"
+    },
+    {
+        "symbol": "PG.PA"
+    },
+    {
+        "symbol": "PG.AS"
+    },
+    {
+        "symbol": "PG.MI"
+    },
+    {
+        "symbol": "PG.MC"
+    },
+    {
+        "symbol": "PG.TO"
+    },
+    {
+        "symbol": "CRM.DE"
+    },
+    {
+        "symbol": "CRM.L"
+    },
+    {
+        "symbol": "CRM.PA"
+    },
+    {
+        "symbol": "CRM.AS"
+    },
+    {
+        "symbol": "CRM.MI"
+    },
+    {
+        "symbol": "CRM.MC"
+    },
+    {
+        "symbol": "CRM.TO"
+    },
+    {
+        "symbol": "AMD.DE"
+    },
+    {
+        "symbol": "AMD.L"
+    },
+    {
+        "symbol": "AMD.PA"
+    },
+    {
+        "symbol": "AMD.AS"
+    },
+    {
+        "symbol": "AMD.MI"
+    },
+    {
+        "symbol": "AMD.MC"
+    },
+    {
+        "symbol": "AMD.TO"
+    },
+    {
+        "symbol": "NFLX.DE"
+    },
+    {
+        "symbol": "NFLX.L"
+    },
+    {
+        "symbol": "NFLX.PA"
+    },
+    {
+        "symbol": "NFLX.AS"
+    },
+    {
+        "symbol": "NFLX.MI"
+    },
+    {
+        "symbol": "NFLX.MC"
+    },
+    {
+        "symbol": "NFLX.TO"
+    },
+    {
+        "symbol": "TXN.DE"
+    },
+    {
+        "symbol": "TXN.L"
+    },
+    {
+        "symbol": "TXN.PA"
+    },
+    {
+        "symbol": "TXN.AS"
+    },
+    {
+        "symbol": "TXN.MI"
+    },
+    {
+        "symbol": "TXN.MC"
+    },
+    {
+        "symbol": "TXN.TO"
+    },
+    {
+        "symbol": "ADSK.DE"
+    },
+    {
+        "symbol": "ADSK.L"
+    },
+    {
+        "symbol": "ADSK.PA"
+    },
+    {
+        "symbol": "ADSK.AS"
+    },
+    {
+        "symbol": "ADSK.MI"
+    },
+    {
+        "symbol": "ADSK.MC"
+    },
+    {
+        "symbol": "ADSK.TO"
+    },
+    {
+        "symbol": "INTC.DE"
+    },
+    {
+        "symbol": "INTC.L"
+    },
+    {
+        "symbol": "INTC.PA"
+    },
+    {
+        "symbol": "INTC.AS"
+    },
+    {
+        "symbol": "INTC.MI"
+    },
+    {
+        "symbol": "INTC.MC"
+    },
+    {
+        "symbol": "INTC.TO"
+    },
+    {
+        "symbol": "QCOM.DE"
+    },
+    {
+        "symbol": "QCOM.L"
+    },
+    {
+        "symbol": "QCOM.PA"
+    },
+    {
+        "symbol": "QCOM.AS"
+    },
+    {
+        "symbol": "QCOM.MI"
+    },
+    {
+        "symbol": "QCOM.MC"
+    },
+    {
+        "symbol": "QCOM.TO"
+    },
+    {
+        "symbol": "AMGN.DE"
+    },
+    {
+        "symbol": "AMGN.L"
+    },
+    {
+        "symbol": "AMGN.PA"
+    },
+    {
+        "symbol": "AMGN.AS"
+    },
+    {
+        "symbol": "AMGN.MI"
+    },
+    {
+        "symbol": "AMGN.MC"
+    },
+    {
+        "symbol": "AMGN.TO"
+    },
+    {
+        "symbol": "ISRG.DE"
+    },
+    {
+        "symbol": "ISRG.L"
+    },
+    {
+        "symbol": "ISRG.PA"
+    },
+    {
+        "symbol": "ISRG.AS"
+    },
+    {
+        "symbol": "ISRG.MI"
+    },
+    {
+        "symbol": "ISRG.MC"
+    },
+    {
+        "symbol": "ISRG.TO"
+    },
+    {
+        "symbol": "HON.DE"
+    },
+    {
+        "symbol": "HON.L"
+    },
+    {
+        "symbol": "HON.PA"
+    },
+    {
+        "symbol": "HON.AS"
+    },
+    {
+        "symbol": "HON.MI"
+    },
+    {
+        "symbol": "HON.MC"
+    },
+    {
+        "symbol": "HON.TO"
+    },
+    {
+        "symbol": "SAP.L"
+    },
+    {
+        "symbol": "SAP.PA"
+    },
+    {
+        "symbol": "SAP.AS"
+    },
+    {
+        "symbol": "SAP.MI"
+    },
+    {
+        "symbol": "SAP.MC"
+    },
+    {
+        "symbol": "SAP.TO"
+    },
+    {
+        "symbol": "SIE.L"
+    },
+    {
+        "symbol": "SIE.PA"
+    },
+    {
+        "symbol": "SIE.AS"
+    },
+    {
+        "symbol": "SIE.MI"
+    },
+    {
+        "symbol": "SIE.MC"
+    },
+    {
+        "symbol": "SIE.TO"
+    },
+    {
+        "symbol": "ALV.L"
+    },
+    {
+        "symbol": "ALV.PA"
+    },
+    {
+        "symbol": "ALV.AS"
+    },
+    {
+        "symbol": "ALV.MI"
+    },
+    {
+        "symbol": "ALV.MC"
+    },
+    {
+        "symbol": "ALV.TO"
+    },
+    {
+        "symbol": "DTE.L"
+    },
+    {
+        "symbol": "DTE.PA"
+    },
+    {
+        "symbol": "DTE.AS"
+    },
+    {
+        "symbol": "DTE.MI"
+    },
+    {
+        "symbol": "DTE.MC"
+    },
+    {
+        "symbol": "DTE.TO"
+    },
+    {
+        "symbol": "AIR.L"
+    },
+    {
+        "symbol": "AIR.PA"
+    },
+    {
+        "symbol": "AIR.AS"
+    },
+    {
+        "symbol": "AIR.MI"
+    },
+    {
+        "symbol": "AIR.MC"
+    },
+    {
+        "symbol": "AIR.TO"
+    },
+    {
+        "symbol": "BMW.L"
+    },
+    {
+        "symbol": "BMW.PA"
+    },
+    {
+        "symbol": "BMW.AS"
+    },
+    {
+        "symbol": "BMW.MI"
+    },
+    {
+        "symbol": "BMW.MC"
+    },
+    {
+        "symbol": "BMW.TO"
+    },
+    {
+        "symbol": "BAS.L"
+    },
+    {
+        "symbol": "BAS.PA"
+    },
+    {
+        "symbol": "BAS.AS"
+    },
+    {
+        "symbol": "BAS.MI"
+    },
+    {
+        "symbol": "BAS.MC"
+    },
+    {
+        "symbol": "BAS.TO"
+    },
+    {
+        "symbol": "BAYN.L"
+    },
+    {
+        "symbol": "BAYN.PA"
+    },
+    {
+        "symbol": "BAYN.AS"
+    },
+    {
+        "symbol": "BAYN.MI"
+    },
+    {
+        "symbol": "BAYN.MC"
+    },
+    {
+        "symbol": "BAYN.TO"
+    },
+    {
+        "symbol": "BEI.L"
+    },
+    {
+        "symbol": "BEI.PA"
+    },
+    {
+        "symbol": "BEI.AS"
+    },
+    {
+        "symbol": "BEI.MI"
+    },
+    {
+        "symbol": "BEI.MC"
+    },
+    {
+        "symbol": "BEI.TO"
+    },
+    {
+        "symbol": "CON.L"
+    },
+    {
+        "symbol": "CON.PA"
+    },
+    {
+        "symbol": "CON.AS"
+    },
+    {
+        "symbol": "CON.MI"
+    },
+    {
+        "symbol": "CON.MC"
+    },
+    {
+        "symbol": "CON.TO"
+    },
+    {
+        "symbol": "1COV.L"
+    },
+    {
+        "symbol": "1COV.PA"
+    },
+    {
+        "symbol": "1COV.AS"
+    },
+    {
+        "symbol": "1COV.MI"
+    },
+    {
+        "symbol": "1COV.MC"
+    },
+    {
+        "symbol": "1COV.TO"
+    },
+    {
+        "symbol": "DTG.L"
+    },
+    {
+        "symbol": "DTG.PA"
+    },
+    {
+        "symbol": "DTG.AS"
+    },
+    {
+        "symbol": "DTG.MI"
+    },
+    {
+        "symbol": "DTG.MC"
+    },
+    {
+        "symbol": "DTG.TO"
+    },
+    {
+        "symbol": "DB1.L"
+    },
+    {
+        "symbol": "DB1.PA"
+    },
+    {
+        "symbol": "DB1.AS"
+    },
+    {
+        "symbol": "DB1.MI"
+    },
+    {
+        "symbol": "DB1.MC"
+    },
+    {
+        "symbol": "DB1.TO"
+    },
+    {
+        "symbol": "DBK.L"
+    },
+    {
+        "symbol": "DBK.PA"
+    },
+    {
+        "symbol": "DBK.AS"
+    },
+    {
+        "symbol": "DBK.MI"
+    },
+    {
+        "symbol": "DBK.MC"
+    },
+    {
+        "symbol": "DBK.TO"
+    },
+    {
+        "symbol": "LHA.L"
+    },
+    {
+        "symbol": "LHA.PA"
+    },
+    {
+        "symbol": "LHA.AS"
+    },
+    {
+        "symbol": "LHA.MI"
+    },
+    {
+        "symbol": "LHA.MC"
+    },
+    {
+        "symbol": "LHA.TO"
+    },
+    {
+        "symbol": "MTX.L"
+    },
+    {
+        "symbol": "MTX.PA"
+    },
+    {
+        "symbol": "MTX.AS"
+    },
+    {
+        "symbol": "MTX.MI"
+    },
+    {
+        "symbol": "MTX.MC"
+    },
+    {
+        "symbol": "MTX.TO"
+    },
+    {
+        "symbol": "MUV2.L"
+    },
+    {
+        "symbol": "MUV2.PA"
+    },
+    {
+        "symbol": "MUV2.AS"
+    },
+    {
+        "symbol": "MUV2.MI"
+    },
+    {
+        "symbol": "MUV2.MC"
+    },
+    {
+        "symbol": "MUV2.TO"
+    },
+    {
+        "symbol": "RWE.L"
+    },
+    {
+        "symbol": "RWE.PA"
+    },
+    {
+        "symbol": "RWE.AS"
+    },
+    {
+        "symbol": "RWE.MI"
+    },
+    {
+        "symbol": "RWE.MC"
+    },
+    {
+        "symbol": "RWE.TO"
+    },
+    {
+        "symbol": "ENR.L"
+    },
+    {
+        "symbol": "ENR.PA"
+    },
+    {
+        "symbol": "ENR.AS"
+    },
+    {
+        "symbol": "ENR.MI"
+    },
+    {
+        "symbol": "ENR.MC"
+    },
+    {
+        "symbol": "ENR.TO"
+    },
+    {
+        "symbol": "SY1.L"
+    },
+    {
+        "symbol": "SY1.PA"
+    },
+    {
+        "symbol": "SY1.AS"
+    },
+    {
+        "symbol": "SY1.MI"
+    },
+    {
+        "symbol": "SY1.MC"
+    },
+    {
+        "symbol": "SY1.TO"
     }
 ]
