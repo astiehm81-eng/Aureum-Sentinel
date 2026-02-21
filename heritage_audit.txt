@@ -1,8 +1,18 @@
-=== AUREUM SENTINEL AUDIT REPORT [2026-02-21 05:24:56] ===
-Gescannt: 1931 Assets
-Erfolgreich: 1327
-Neue Ankerpunkte gesetzt: 0
-Gereinigte Assets (Delisted): 79
+=== AUREUM SENTINEL AUDIT REPORT [2026-02-21 05:33:43] ===
+Gescannt: 1852 Assets
+Erfolgreich: 1424
+Neue Ankerpunkte gesetzt: 82
+Gereinigte Assets (Delisted): 36
 Status: ⚠️ RATE LIMITED
 ----------------------------------------
 Top Volatilität / Bewegungen in diesem Lauf:
+ > CASY
+ > CBL
+ > CBIO
+ > CBFV
+ > CBRL
+ > CBRE
+ > CBOE
+ > CBSH
+ > CBT
+ > CC

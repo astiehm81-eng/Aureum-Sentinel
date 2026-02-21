@@ -3948,9 +3948,6 @@
         "symbol": "CAL"
     },
     {
-        "symbol": "CALB"
-    },
-    {
         "symbol": "CALM"
     },
     {
@@ -3963,16 +3960,10 @@
         "symbol": "CAN"
     },
     {
-        "symbol": "CANO"
-    },
-    {
         "symbol": "CAPR"
     },
     {
         "symbol": "CAR"
-    },
-    {
-        "symbol": "CARA"
     },
     {
         "symbol": "CARE"
@@ -3999,9 +3990,6 @@
         "symbol": "CAT"
     },
     {
-        "symbol": "CATC"
-    },
-    {
         "symbol": "CATO"
     },
     {
@@ -4017,12 +4005,6 @@
         "symbol": "CBAT"
     },
     {
-        "symbol": "CBAY"
-    },
-    {
-        "symbol": "CBB"
-    },
-    {
         "symbol": "CBFV"
     },
     {
@@ -4030,12 +4012,6 @@
     },
     {
         "symbol": "CBL"
-    },
-    {
-        "symbol": "CBLI"
-    },
-    {
-        "symbol": "CBMB"
     },
     {
         "symbol": "CBOE"
@@ -4053,9 +4029,6 @@
         "symbol": "CBT"
     },
     {
-        "symbol": "CBTX"
-    },
-    {
         "symbol": "CBU"
     },
     {
@@ -4071,9 +4044,6 @@
         "symbol": "CCEP"
     },
     {
-        "symbol": "CCF"
-    },
-    {
         "symbol": "CCI"
     },
     {
@@ -4081,9 +4051,6 @@
     },
     {
         "symbol": "CCL"
-    },
-    {
-        "symbol": "CCLP"
     },
     {
         "symbol": "CCM"
@@ -4110,31 +4077,19 @@
         "symbol": "CCTG"
     },
     {
-        "symbol": "CCTY"
-    },
-    {
         "symbol": "CCU"
     },
     {
         "symbol": "CCXI"
     },
     {
-        "symbol": "CDAY"
-    },
-    {
         "symbol": "CDE"
-    },
-    {
-        "symbol": "CDK"
     },
     {
         "symbol": "CDL"
     },
     {
         "symbol": "CDLX"
-    },
-    {
-        "symbol": "CDMO"
     },
     {
         "symbol": "CDNA"
@@ -4146,13 +4101,7 @@
         "symbol": "CDRE"
     },
     {
-        "symbol": "CDTX"
-    },
-    {
         "symbol": "CDW"
-    },
-    {
-        "symbol": "CDXC"
     },
     {
         "symbol": "CDXS"
@@ -4164,25 +4113,10 @@
         "symbol": "CE"
     },
     {
-        "symbol": "CEA"
-    },
-    {
-        "symbol": "CECE"
-    },
-    {
-        "symbol": "CEI"
-    },
-    {
-        "symbol": "CEIX"
-    },
-    {
         "symbol": "CELC"
     },
     {
         "symbol": "CELH"
-    },
-    {
-        "symbol": "CELP"
     },
     {
         "symbol": "CENT"
@@ -4197,12 +4131,6 @@
         "symbol": "CEPU"
     },
     {
-        "symbol": "CERE"
-    },
-    {
-        "symbol": "CERN"
-    },
-    {
         "symbol": "CERS"
     },
     {
@@ -4212,16 +4140,10 @@
         "symbol": "CET"
     },
     {
-        "symbol": "CETV"
-    },
-    {
         "symbol": "CEVA"
     },
     {
         "symbol": "CF"
-    },
-    {
-        "symbol": "CFB"
     },
     {
         "symbol": "CFBK"
@@ -4236,19 +4158,10 @@
         "symbol": "CFG"
     },
     {
-        "symbol": "CFMS"
-    },
-    {
         "symbol": "CFR"
     },
     {
-        "symbol": "CFRX"
-    },
-    {
         "symbol": "CG"
-    },
-    {
-        "symbol": "CGA"
     },
     {
         "symbol": "CGBL"
@@ -4284,25 +4197,16 @@
         "symbol": "CHEF"
     },
     {
-        "symbol": "CHEK"
-    },
-    {
         "symbol": "CHGG"
     },
     {
         "symbol": "CHH"
     },
     {
-        "symbol": "CHMA"
-    },
-    {
         "symbol": "CHMG"
     },
     {
         "symbol": "CHMI"
-    },
-    {
-        "symbol": "CHNG"
     },
     {
         "symbol": "CHNR"
@@ -4314,22 +4218,13 @@
         "symbol": "CHRW"
     },
     {
-        "symbol": "CHS"
-    },
-    {
         "symbol": "CHT"
     },
     {
         "symbol": "CHTR"
     },
     {
-        "symbol": "CHUY"
-    },
-    {
         "symbol": "CHW"
-    },
-    {
-        "symbol": "CHX"
     },
     {
         "symbol": "CHY"
@@ -4366,9 +4261,6 @@
     },
     {
         "symbol": "CINR"
-    },
-    {
-        "symbol": "CIO"
     },
     {
         "symbol": "CIR"
