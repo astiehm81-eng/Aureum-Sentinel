@@ -1,8 +1,7 @@
 pandas
-pandas-datareader
 yfinance
 pyarrow
 fastparquet
 requests
-google-generativeai
+google-genai
 pytz
