@@ -2,16 +2,17 @@ import pandas as pd
 import yfinance as yf
 import os
 import json
+import time
+import random
 from datetime import datetime
 
-# Neues SDK importieren
 try:
     from google import genai
     HAS_AI = True
 except ImportError:
     HAS_AI = False
 
-# --- KONFIGURATION V174 ---
+# --- KONFIGURATION V176 ---
 POOL_FILE = "isin_pool.json"
 AUDIT_FILE = "heritage_audit.txt"
 EXPANSION_TARGET = 10000
@@ -24,30 +25,38 @@ def log(tag, msg):
 
 class AureumSentinel:
     def __init__(self):
-        # Initialisierung des neuen Clients
         self.client = genai.Client(api_key=GEMINI_API_KEY) if HAS_AI and GEMINI_API_KEY else None
 
-    def ask_gemini_for_tickers(self, current_count):
+    def get_bulk_tickers(self, current_count):
+        """Macht EINE große Anfrage statt vieler kleiner."""
         if not self.client:
-            log("SKIP", "KI-Client nicht bereit.")
             return []
 
+        # Wir fragen nach einer massiven Liste in einem Rutsch
         prompt = f"""
-        Handle als Aureum Sentinel Marktanalyse-Kern. 
-        Ziel: 99% Marktabdeckung. Aktuell: {current_count} Assets.
-        Nenne mir 100 neue, valide Aktien-Ticker (mit Suffixen wie .DE, .L, .PA, .HK).
-        Gib NUR eine kommagetrennte Liste zurück, kein Text, kein Markdown.
+        Handle als strategischer Markt-Analyst. Wir benötigen 500 Ticker-Symbole 
+        für globale Aktien (Fokus: US Mid-Caps, EU Small-Caps, Asian Growth). 
+        Wir haben bereits {current_count} Assets.
+        Gib NUR die Ticker als kommagetrennte Liste zurück. Keine Erklärungen.
+        Format-Beispiel: AAPL, SAP.DE, 7203.T, VOD.L
         """
+        
         try:
-            # Aufruf über das neue SDK (gemini-2.0-flash ist der aktuelle Standard 2026)
+            log("AI-BULK", "Sende Bulk-Anfrage an Gemini 2.0...")
             response = self.client.models.generate_content(
                 model="gemini-2.0-flash", 
                 contents=prompt
             )
-            raw_text = response.text.strip()
-            return [t.strip().upper() for t in raw_text.split(',')]
+            # API-Schonfrist nach dem Call
+            time.sleep(5) 
+            
+            raw_text = response.text.strip().replace("`", "").replace("\n", "")
+            return [t.strip().upper() for t in raw_text.split(',') if len(t.strip()) > 1]
         except Exception as e:
-            log("ERROR", f"KI-Anfrage fehlgeschlagen: {e}")
+            if "429" in str(e):
+                log("QUOTA", "API gedrosselt. Wartezeit einhalten.")
+            else:
+                log("ERROR", f"Fehler bei Bulk-Anfrage: {e}")
             return []
 
     def run_cycle(self):
@@ -56,38 +65,38 @@ class AureumSentinel:
             with open(POOL_FILE, "r") as f: pool = json.load(f)
         
         current_symbols = {a['symbol'] for a in pool}
-        
-        # KI-Expansion
-        added = 0
-        if len(current_symbols) < EXPANSION_TARGET:
-            log("AI-MINING", "Frage Gemini 2.0 nach neuen Daten...")
-            new_tickers = self.ask_gemini_for_tickers(len(current_symbols))
+        initial_len = len(current_symbols)
+
+        if initial_len < EXPANSION_TARGET:
+            # Nur ein einziger API Call pro Zyklus!
+            new_candidates = self.get_bulk_tickers(initial_len)
             
-            for sym in new_tickers:
-                if sym and sym not in current_symbols and len(current_symbols) < EXPANSION_TARGET:
+            added = 0
+            for sym in new_candidates:
+                if sym not in current_symbols and len(current_symbols) < EXPANSION_TARGET:
                     pool.append({"symbol": sym})
                     current_symbols.add(sym)
                     added += 1
+            
+            log("SUCCESS", f"Bulk-Injektion abgeschlossen: +{added} Assets.")
 
+        # Speichern
         with open(POOL_FILE, "w") as f:
             json.dump(pool, f, indent=4)
 
         # Audit
         ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        status = "🚀 GEMINI 2.0 READY" if (HAS_AI and GEMINI_API_KEY) else "⚠️ SDK/KEY ISSUE"
-        
+        progress = round((len(pool)/EXPANSION_TARGET)*100, 2)
         report = [
-            f"=== AUREUM SENTINEL V174 | NEXT-GEN AI [{ts}] ===",
+            f"=== AUREUM SENTINEL V176 | BULK-MODE [{ts}] ===",
             f"Pool-Größe: {len(pool)} / {EXPANSION_TARGET}",
-            f"System-Status: {status}",
-            f"KI-Injektion: +{added} Assets",
-            f"Fortschritt: {round((len(pool)/EXPANSION_TARGET)*100, 2)}%",
+            f"Strategie: Ein Bulk-Request pro 15 Min.",
+            f"Fortschritt: {progress}%",
             "-" * 40,
-            "HINWEIS: Upgrade auf google-genai SDK erfolgreich."
+            "HINWEIS: Quota-Schutz durch Request-Bündelung aktiv."
         ]
         with open(AUDIT_FILE, "w", encoding="utf-8") as f:
             f.write("\n".join(report))
-        log("SUCCESS", f"Lauf beendet. Stand: {len(pool)}")
 
 if __name__ == "__main__":
     AureumSentinel().run_cycle()
