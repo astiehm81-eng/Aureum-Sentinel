@@ -2,34 +2,59 @@ name: Aureum Sentinel Perpetual Sync
 
 on:
   schedule:
+    # Führt den Sentinel alle 15 Minuten aus
     - cron: '*/15 * * * *'
+  push:
+    branches: [ main ]
   workflow_dispatch:
+    # Erlaubt den manuellen Start über das GitHub UI
+
+# Verhindert parallele Ausführungen, falls ein Run hakt
+concurrency:
+  group: sentinel-sync
+  cancel-in-progress: false
 
 jobs:
   sentinel-cycle:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-    
+      contents: write  # Wichtig für den automatischen Commit der Daten
+
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Setup Python
+        uses: actions/checkout@v4
         with:
           python-version: '3.10'
 
       - name: Install Dependencies
         run: |
-          pip install pandas yfinance pyarrow fastparquet fastparquet[zstd]
+          python -m pip install --upgrade pip
+          pip install pandas yfinance pyarrow fastparquet zstandard
 
-      - name: Run Aureum Sentinel
+      - name: Execute Aureum Sentinel V151
         run: python aureum_sentinel.py
+        env:
+          PYTHONUNBUFFERED: 1
 
-      - name: Auto-Commit and Push Changes
+      - name: Commit & Push Changes
         run: |
           git config --global user.name "Aureum-Sentinel-Bot"
-          git config --global user.email "sentinel@aureum.ai"
-          git add .
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Sentinel Pulse: Heritage & Audit Sync" && git push)
+          git config --global user.email "bot@aureum-sentinel.local"
+          
+          # Fügt alle Änderungen (Heritage, Audit, Pool-Bereinigung) hinzu
+          git add heritage/*.parquet
+          git add heritage/live_ticker.feather
+          git add isin_pool.json
+          git add anchors_memory.json
+          git add heritage_audit.txt
+          
+          # Nur committen, wenn sich tatsächlich etwas geändert hat
+          if git diff --staged --quiet; then
+            echo "Keine Änderungen zu synchronisieren."
+          else
+            git commit -m "Sentinel Pulse: Heritage & Audit Sync [$(date +'%Y-%m-%d %H:%M')]"
+            git push
+          fi
