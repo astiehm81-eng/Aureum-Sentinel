@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     # Erlaubt den manuellen Start über das GitHub UI
 
-# Verhindert parallele Ausführungen, falls ein Run hakt
+# Verhindert parallele Ausführungen
 concurrency:
   group: sentinel-sync
   cancel-in-progress: false
@@ -18,14 +18,14 @@ jobs:
   sentinel-cycle:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # Wichtig für den automatischen Commit der Daten
+      contents: write
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/checkout@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
@@ -34,7 +34,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas yfinance pyarrow fastparquet zstandard
 
-      - name: Execute Aureum Sentinel V151
+      - name: Execute Aureum Sentinel V152
         run: python aureum_sentinel.py
         env:
           PYTHONUNBUFFERED: 1
@@ -44,12 +44,12 @@ jobs:
           git config --global user.name "Aureum-Sentinel-Bot"
           git config --global user.email "bot@aureum-sentinel.local"
           
-          # Fügt alle Änderungen (Heritage, Audit, Pool-Bereinigung) hinzu
-          git add heritage/*.parquet
-          git add heritage/live_ticker.feather
-          git add isin_pool.json
-          git add anchors_memory.json
-          git add heritage_audit.txt
+          # Sicherstellen, dass neue Dateien im heritage Ordner erkannt werden
+          git add heritage/*.parquet || true
+          git add heritage/*.feather || true
+          git add isin_pool.json || true
+          git add anchors_memory.json || true
+          git add heritage_audit.txt || true
           
           # Nur committen, wenn sich tatsächlich etwas geändert hat
           if git diff --staged --quiet; then
