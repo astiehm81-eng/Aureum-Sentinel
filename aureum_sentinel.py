@@ -14,7 +14,7 @@ from datetime import datetime
 HERITAGE_ROOT = "heritage/"
 POOL_FILE = "isin_pool.json"
 AUDIT_FILE = "heritage_audit.txt"
-MAX_WORKERS = 50 
+MAX_WORKERS = 100
 STOOQ_LOCK = threading.Lock()
 FILE_LOCKS = {}
 FILE_LOCKS_LOCK = threading.Lock()
