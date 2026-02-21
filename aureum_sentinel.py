@@ -2,15 +2,18 @@ import pandas as pd
 import yfinance as yf
 import os
 import json
-import random
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import google.generativeai as genai
 
-# --- KONFIGURATION V168 ---
+# --- KONFIGURATION V172 ---
 POOL_FILE = "isin_pool.json"
 AUDIT_FILE = "heritage_audit.txt"
-EXPANSION_TARGET = 10000 
-MAX_WORKERS = 20
+EXPANSION_TARGET = 10000
+
+# Hole den API-Key aus den Umgebungsvariablen (GitHub Secrets)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 def log(tag, msg):
     ts = datetime.now().strftime('%H:%M:%S')
@@ -18,25 +21,28 @@ def log(tag, msg):
 
 class AureumSentinel:
     def __init__(self):
-        # Master-List Expansion (neue Tranche für heute)
-        self.knowledge_influx = [
-            "RHM.DE", "ZAL.DE", "PUM.DE", "HNR1.DE", "CBK.DE", "MOR.DE", "TL0.DE", "UTDI.DE",
-            "FME.DE", "FRE.DE", "HEI.DE", "HEN3.DE", "SDF.DE", "EVK.DE", "WAF.DE", "NDX1.DE",
-            "PLTR", "SNOW", "U", "RBLX", "COIN", "DKNG", "HOOD", "AFRM", "SQ", "SHOP", "PYPL",
-            "BABA", "JD", "BIDU", "TCEHY", "PDD", "LI", "XPEV", "NIO", "BYDDY"
-        ]
+        self.model = genai.GenerativeModel('gemini-1.5-flash') if GEMINI_API_KEY else None
 
-    def check_ticker_persistence(self, symbol):
-        """Prüft Ticker mit 5-Tage-Fenster, um das Wochenende zu überbrücken."""
+    def ask_gemini_for_tickers(self, current_count):
+        """Ruft aktiv die KI auf, um das nächste 1000er Paket an ISINs/Tickern zu generieren."""
+        if not self.model:
+            log("WARNING", "Kein API-Key gefunden. Nutze Fallback-Logik.")
+            return ["AAPL", "SAP.DE", "MSFT", "NVDA", "TSLA"] # Minimaler Fallback
+
+        prompt = f"""
+        Du bist der Core-Agent des Aureum Sentinel. Dein Ziel ist 99% Marktabdeckung.
+        Wir haben aktuell {current_count} Assets.
+        Nenne mir 100 neue, valide Aktien-Ticker (inkl. Suffixe wie .DE, .L, .PA) aus dem Bereich 
+        Mid-Caps, Small-Caps und internationale Emerging Markets.
+        Gib NUR eine kommagetrennte Liste der Ticker zurück, kein Text.
+        """
         try:
-            t = yf.Ticker(symbol)
-            # Am Wochenende reicht '1d' oft nicht, wir nehmen '5d' für die Historie
-            df = t.history(period="5d")
-            if not df.empty:
-                return {"symbol": symbol, "price": df['Close'].iloc[-1]}
-        except:
-            return None
-        return None
+            response = self.model.generate_content(prompt)
+            ticker_list = response.text.strip().split(',')
+            return [t.strip().upper() for t in ticker_list]
+        except Exception as e:
+            log("ERROR", f"Gemini API Call fehlgeschlagen: {e}")
+            return []
 
     def run_cycle(self):
         # 1. Pool laden
@@ -45,38 +51,37 @@ class AureumSentinel:
             with open(POOL_FILE, "r") as f: pool = json.load(f)
         
         current_symbols = {a['symbol'] for a in pool}
-        log("SYSTEM", f"Start-Pool: {len(current_symbols)} Assets.")
+        
+        # 2. Aktive KI-Suche
+        if len(current_symbols) < EXPANSION_TARGET:
+            log("AI-SEARCH", "Frage Gemini nach neuen Markt-Daten...")
+            new_tickers = self.ask_gemini_for_tickers(len(current_symbols))
+            
+            added_this_run = 0
+            for sym in new_tickers:
+                if sym not in current_symbols:
+                    pool.append({"symbol": sym})
+                    current_symbols.add(sym)
+                    added_this_run += 1
+            
+            log("AI-SEARCH", f"✅ Gemini hat {added_this_run} neue Assets identifiziert.")
 
-        # 2. Gemini Influx (Wiederherstellung und Erweiterung)
-        added_count = 0
-        for sym in self.knowledge_influx:
-            if sym not in current_symbols:
-                pool.append({"symbol": sym})
-                current_symbols.add(sym)
-                added_count += 1
-
-        # 3. Validierung (Nur Stichproben am Wochenende, um Zeit zu sparen)
-        # Wir löschen NICHTS am Wochenende, wir validieren nur neue Funde
-        log("VALIDATOR", "Wochenend-Modus: Alle Assets bleiben erhalten. Historie wird für neue Funde geprüft.")
-
-        # 4. Speichern
+        # 3. Speichern
         with open(POOL_FILE, "w") as f:
             json.dump(pool, f, indent=4)
 
-        # 5. Audit Report
+        # 4. Audit
         ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         report = [
-            f"=== AUREUM SENTINEL V168 | WEEKEND PERSISTENCE [{ts}] ===",
+            f"=== AUREUM SENTINEL V172 | AI-LIVE-EXPANSION [{ts}] ===",
             f"Pool-Größe: {len(pool)} / {EXPANSION_TARGET}",
-            f"Status: ✅ GESCHÜTZT (Wochenende)",
-            f"Neu injiziert: {added_count} (Prio: Mid-Caps & China Tech)",
+            f"KI-Entdeckungen: {added_this_run if 'added_this_run' in locals() else 0}",
+            f"Status: {'🤖 AI-CONNECTED' if GEMINI_API_KEY else '⚠️ STANDALONE'}",
             "-" * 40,
-            "HINWEIS: Historie-Check auf 5 Tage erweitert (Yahoo-Weekend-Fix).",
-            "Lösch-Filter: DEAKTIVIERT bis Montag 08:00 Uhr."
+            "Strategie: Direkte Anbindung an Gemini-Core für 99% Abdeckung."
         ]
         with open(AUDIT_FILE, "w", encoding="utf-8") as f:
             f.write("\n".join(report))
-        log("SUCCESS", f"Pool steht stabil bei {len(pool)} Assets.")
 
 if __name__ == "__main__":
     AureumSentinel().run_cycle()
