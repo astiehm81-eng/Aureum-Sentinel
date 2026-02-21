@@ -14,50 +14,58 @@ from datetime import datetime
 HERITAGE_ROOT = "heritage/"
 POOL_FILE = "isin_pool.json"
 AUDIT_FILE = "heritage/sentinel_audit.log"
-MAX_WORKERS = 30 
+MAX_WORKERS_YAHOO = 40 
 STOOQ_LOCK = threading.Lock() 
-ANCHOR_THRESHOLD = 0.0005
-SKOOQ_URL = "https://stooq.com/q/d/l/?s={ticker}&i=d"
-
-USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/121.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) Chrome/121.0.0.0 Safari/537.36"
-]
+ANCHOR_THRESHOLD = 0.0005 
 
 class AureumInspector:
     def __init__(self):
         self.stats_lock = threading.Lock()
-        self.log_lock = threading.Lock()
-        self.stats = {"total": 0, "merges": 0, "stooq_hits": 0, "start": time.time()}
+        self.stats = {
+            "total_processed": 0,
+            "new_isins": 0,
+            "gaps_filled": 0,
+            "total_anchors": 0,
+            "start_time": time.time(),
+            "active_pool_size": 0
+        }
 
-    def log(self, level, ticker, message):
-        ts = datetime.now().strftime('%H:%M:%S')
-        line = f"[{ts}] [{level:7}] {ticker:10} | {message}"
-        print(line, flush=True)
-        with self.log_lock:
-            os.makedirs(os.path.dirname(AUDIT_FILE), exist_ok=True)
-            with open(AUDIT_FILE, "a", encoding="utf-8") as f: f.write(line + "\n")
+    def get_storage_info(self):
+        """Berechnet die aktuelle Größe der Datenbasis auf der Platte"""
+        total_size = 0
+        file_count = 0
+        for root, dirs, files in os.walk(HERITAGE_ROOT):
+            for f in files:
+                if f.endswith(".parquet"):
+                    total_size += os.path.getsize(os.path.join(root, f))
+                    file_count += 1
+        return total_size / (1024 * 1024), file_count # MB, Anzahl
 
-    def apply_iron_anchor(self, df):
-        if df.empty: return df
-        df = df.sort_values('Date').copy()
+    def log_status(self, pool_len):
+        """Das große Dashboard-Update für Marktabdeckung"""
+        size_mb, files = self.get_storage_info()
+        elapsed = (time.time() - self.stats['start_time']) / 60
+        coverage = (files / pool_len) * 100 if pool_len > 0 else 0
+        
+        print(f"\n" + "="*60)
+        print(f" AUREUM SENTINEL STATUS | {datetime.now().strftime('%H:%M:%S')}")
+        print(f" {'>'*2} Marktabdeckung:   {coverage:.2f}% ({files} von {pool_len} Assets)")
+        print(f" {'>'*2} Datenbasis-Größe: {size_mb:.2f} MB")
+        print(f" {'>'*2} Neue ISINs (10k): {self.stats['new_isins']} (Pool: {pool_len})")
+        print(f" {'>'*2} Speed:            {self.stats['total_processed']/elapsed:.1f} Ast/Min")
+        print(f" {'>'*2} Geheilte Lücken:  {self.stats['gaps_filled']}")
+        print("="*60 + "\n")
+
+    def apply_iron_standard(self, df):
+        if df.empty: return df, 0
+        df = df.sort_values('Date').drop_duplicates(subset=['Date'])
         df['Date'] = pd.to_datetime(df['Date'], utc=True).dt.tz_localize(None)
+        
         anchors = [df.iloc[0].to_dict()]
         for i in range(1, len(df)):
             if abs((df.iloc[i]['Close'] / anchors[-1]['Close']) - 1) >= ANCHOR_THRESHOLD:
                 anchors.append(df.iloc[i].to_dict())
-        return pd.DataFrame(anchors)
-
-    def save_heritage(self, df, ticker):
-        for year, group in df.groupby(df['Date'].dt.year):
-            path = f"{HERITAGE_ROOT}{(int(year)//10)*10}s/heritage_{int(year)}.parquet"
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            if os.path.exists(path):
-                old = pd.read_parquet(path)
-                group = pd.concat([old, group]).drop_duplicates(subset=['Date']).sort_values('Date')
-            group.to_parquet(path, index=False, compression='snappy')
-            with self.stats_lock: self.stats["merges"] += 1
+        return pd.DataFrame(anchors), len(anchors)
 
 inspector = AureumInspector()
 
@@ -68,55 +76,70 @@ class AureumSentinel:
     def load_pool(self):
         if os.path.exists(POOL_FILE):
             with open(POOL_FILE, "r") as f: self.pool = json.load(f)
-        else: self.pool = [{"symbol": "SAP.DE"}]
+        else: self.pool = [{"symbol": "SAP.DE"}, {"symbol": "SIE.DE"}]
 
-    def fetch_stooq_safe(self, ticker):
-        with STOOQ_LOCK:
-            time.sleep(random.uniform(2.5, 4.5)) 
-            headers = {"User-Agent": random.choice(USER_AGENTS)}
-            try:
-                r = requests.get(SKOOQ_URL.format(ticker=ticker), headers=headers, timeout=12)
-                if r.status_code == 200 and len(r.content) > 300:
-                    with inspector.stats_lock: inspector.stats["stooq_hits"] += 1
-                    return pd.read_csv(io.StringIO(r.text), parse_dates=['Date'])
-            except: pass
-            return pd.DataFrame()
+    def discover_logic(self, ticker):
+        """Erweitert den Pool Richtung 10.000 Assets"""
+        if len(self.pool) < 10000 and random.random() > 0.90:
+            base = ticker.split('.')[0]
+            for s in ['.DE', '.F', '.AS', '.L', '.PA', '.MI']:
+                new_s = f"{base}{s}"
+                if not any(a['symbol'] == new_s for a in self.pool):
+                    self.pool.append({"symbol": new_s, "source": "discovery"})
+                    with inspector.stats_lock: inspector.stats["new_isins"] += 1
 
     def worker_task(self, asset):
         ticker = asset['symbol']
         try:
-            hist = self.fetch_stooq_safe(ticker)
+            # Check Platte
+            path_exists = any(ticker in f for r, d, files in os.walk(HERITAGE_ROOT) for f in files)
+            
+            # Stooq-Hürde (Serialisiert)
+            hist = pd.DataFrame()
+            if not path_exists: # Nur bei neuen Assets oder großen Lücken
+                with STOOQ_LOCK:
+                    time.sleep(random.uniform(1.2, 2.0))
+                    r = requests.get(f"https://stooq.com/q/d/l/?s={ticker}&i=d", timeout=10)
+                    if r.status_code == 200: 
+                        hist = pd.read_csv(io.StringIO(r.text), parse_dates=['Date'])
+            
+            # Yahoo Update
             stock = yf.Ticker(ticker)
-            recent = stock.history(period="7d", interval="5m").reset_index()
-            recent.rename(columns={'Datetime': 'Date', 'Date': 'Date'}, inplace=True, errors='ignore')
-            
-            if hist.empty and recent.empty: return "EMPTY"
+            recent = stock.history(period="5d", interval="5m").reset_index()
+            recent.rename(columns={'Datetime': 'Date'}, inplace=True, errors='ignore')
 
+            # Heilung & Speichern
             combined = pd.concat([hist, recent], ignore_index=True)
-            combined['Date'] = pd.to_datetime(combined['Date'], utc=True).dt.tz_localize(None)
+            clean_df, anchor_count = inspector.apply_iron_standard(combined)
             
-            clean_df = inspector.apply_iron_anchor(combined)
-            inspector.save_heritage(clean_df, ticker)
+            # Speicher-Logik (Klassisch nach Jahren)
+            for year, group in clean_df.groupby(clean_df['Date'].dt.year):
+                p = f"{HERITAGE_ROOT}{(int(year)//10)*10}s/heritage_{int(year)}.parquet"
+                os.makedirs(os.path.dirname(p), exist_ok=True)
+                if os.path.exists(p):
+                    old = pd.read_parquet(p)
+                    group = pd.concat([old, group]).drop_duplicates(subset=['Date']).sort_values('Date')
+                group.to_parquet(p, index=False, compression='snappy')
+
+            with inspector.stats_lock:
+                inspector.stats["total_processed"] += 1
+                inspector.stats["total_anchors"] += anchor_count
             
-            inspector.log("HEAL", ticker, f"Erfolg ({len(clean_df)} Anker)")
+            self.discover_logic(ticker)
             return "OK"
-        except Exception as e:
-            inspector.log("FAIL", ticker, f"Fehler: {str(e)[:40]}")
-            return "ERR"
+        except: return "ERR"
 
     def run(self):
-        inspector.log("SYSTEM", "START", f"V246 gestartet. Pool: {len(self.pool)}")
-        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            # Batches für bessere Dashboard-Updates
-            for i in range(0, len(self.pool), 300):
-                batch = self.pool[i:i+300]
+        print(f"INITIALISIERUNG: Pool enthält {len(self.pool)} Assets. Starte Scan...")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS_YAHOO) as executor:
+            for i in range(0, len(self.pool), 400):
+                batch = self.pool[i:i+400]
                 futures = [executor.submit(self.worker_task, a) for a in batch]
                 for f in concurrent.futures.as_completed(futures):
-                    with inspector.stats_lock: inspector.stats["total"] += 1
-                    if inspector.stats["total"] % 30 == 0:
-                        elapsed = (time.time() - inspector.stats["start"]) / 60
-                        print(f"\n[DASHBOARD] Stooq: {inspector.stats['stooq_hits']} | Progress: {(inspector.stats['total']/len(self.pool))*100:.1f}% | Speed: {inspector.stats['total']/elapsed:.1f} Ast/Min\n")
+                    pass # Ergebnisse werden über stats_lock gesammelt
                 
+                # Nach jedem Batch: Dashboard & Speichern
+                inspector.log_status(len(self.pool))
                 with open(POOL_FILE, "w") as f: json.dump(self.pool, f, indent=4)
 
 if __name__ == "__main__":
