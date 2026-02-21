@@ -1,6 +1,6 @@
-=== AUREUM SENTINEL V176 | BULK-MODE [2026-02-21 07:07:13] ===
+=== AUREUM SENTINEL V178 | HYBRID VOYAGER [2026-02-21 07:55:45] ===
 Pool-Größe: 1485 / 10000
-Strategie: Ein Bulk-Request pro 15 Min.
-Fortschritt: 14.85%
+Zuwachs: +0
+Status: 💤 IDLE
 ----------------------------------------
-HINWEIS: Quota-Schutz durch Request-Bündelung aktiv.
+Strategie: Zweigleisiges Mining (AI & Wikipedia Scraper).
