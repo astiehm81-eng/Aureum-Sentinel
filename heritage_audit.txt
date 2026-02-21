@@ -1,7 +1,6 @@
-=== AUREUM SENTINEL V168 | WEEKEND PERSISTENCE [2026-02-21 06:22:28] ===
+=== AUREUM SENTINEL V173 | RECOVERY [2026-02-21 06:33:12] ===
 Pool-Größe: 1485 / 10000
-Status: ✅ GESCHÜTZT (Wochenende)
-Neu injiziert: 0 (Prio: Mid-Caps & China Tech)
+Status: ⚠️ MODULE MISSING
+Zuwachs: +0 Assets
 ----------------------------------------
-HINWEIS: Historie-Check auf 5 Tage erweitert (Yahoo-Weekend-Fix).
-Lösch-Filter: DEAKTIVIERT bis Montag 08:00 Uhr.
+HINWEIS: Prüfe GitHub Workflow auf 'pip install google-generativeai'.
