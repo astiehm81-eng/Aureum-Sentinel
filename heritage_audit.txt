@@ -1,7 +1,50 @@
-=== AUREUM SENTINEL V182 | STEALTH SCRAPE [2026-02-21 12:03:31] ===
-Pool-Größe: 1922 / 10000
-Status: ✅ SUCCESS (Headers active)
-Neu extrahiert: +437 Assets
-Fortschritt: 19.22%
-----------------------------------------
-Strategie: Umgehung der 403-Blockade durch User-Agent Spoofing.
+=== AUREUM SENTINEL V188 | PARALLEL HERITAGE [2026-02-21 12:43:35] ===
+Worker-Threads: 12 | Abdeckung: Stooq & Yahoo Hybrid
+------------------------------------------------------------
+AMZN: 210.11 EUR | Vola: 0.2726 | Stooq: ❌
+META: 655.66 EUR | Vola: 0.2564 | Stooq: ❌
+NVDA: 189.82 EUR | Vola: 0.2525 | Stooq: ❌
+V: 320.95 EUR | Vola: 0.272 | Stooq: ❌
+AVGO: 332.65 EUR | Vola: 0.3072 | Stooq: ❌
+MA: 526.41 EUR | Vola: 0.2367 | Stooq: ❌
+TSLA: 411.82 EUR | Vola: 0.1885 | Stooq: ❌
+JPM: 310.79 EUR | Vola: 0.2284 | Stooq: ❌
+LLY: 1009.52 EUR | Vola: 0.2187 | Stooq: ❌
+AAPL: 264.58 EUR | Vola: 0.461 | Stooq: ❌
+ADBE: 258.61 EUR | Vola: 0.2217 | Stooq: ❌
+INTU: 380.55 EUR | Vola: 0.4146 | Stooq: ❌
+MS: 175.41 EUR | Vola: 0.4364 | Stooq: ❌
+AMAT: 375.38 EUR | Vola: 0.5943 | Stooq: ❌
+IBM: 257.16 EUR | Vola: 0.3612 | Stooq: ❌
+INTC: 44.11 EUR | Vola: 0.2249 | Stooq: ❌
+GE: 343.22 EUR | Vola: 0.2252 | Stooq: ❌
+PFE: 26.65 EUR | Vola: 0.1252 | Stooq: ❌
+QCOM: 142.88 EUR | Vola: 0.234 | Stooq: ❌
+VZ: 49.25 EUR | Vola: 0.2022 | Stooq: ❌
+SPGI: 417.48 EUR | Vola: 0.2259 | Stooq: ❌
+OKTA: 74.29 EUR | Vola: 0.6855 | Stooq: ❌
+SNOW: 172.5 EUR | Vola: 0.5686 | Stooq: ❌
+NET: 177.14 EUR | Vola: 0.7087 | Stooq: ❌
+PYPL: 41.65 EUR | Vola: 0.35 | Stooq: ❌
+PANW: 148.7 EUR | Vola: 0.4766 | Stooq: ❌
+TEAM: 75.98 EUR | Vola: 0.4005 | Stooq: ❌
+WDAY: 137.81 EUR | Vola: 0.1273 | Stooq: ❌
+AZN: 204.2 EUR | Vola: 0.2187 | Stooq: ❌
+MDB: 344.56 EUR | Vola: 0.4762 | Stooq: ✅
+BMW.DE: 90.32 EUR | Vola: 0.1968 | Stooq: ❌
+BABA: 154.45 EUR | Vola: 0.2239 | Stooq: ❌
+3690.HK: 80.75 EUR | Vola: 0.2822 | Stooq: ❌
+6758.T: 3336.0 EUR | Vola: 0.2931 | Stooq: ❌
+0700.HK: 522.0 EUR | Vola: 0.1759 | Stooq: ❌
+9984.T: 4329.0 EUR | Vola: 0.8852 | Stooq: ❌
+TCEHY: 68.05 EUR | Vola: 0.2397 | Stooq: ❌
+TM: 239.6 EUR | Vola: 0.2333 | Stooq: ❌
+HMC: 30.27 EUR | Vola: 0.2346 | Stooq: ❌
+CFR.SW: 162.3 EUR | Vola: 0.231 | Stooq: ❌
+SU.PA: 261.9 EUR | Vola: 0.279 | Stooq: ❌
+KER.PA: 278.0 EUR | Vola: 0.3669 | Stooq: ✅
+ITX.MC: 57.66 EUR | Vola: 0.1171 | Stooq: ❌
+BBVA.MC: 19.855 EUR | Vola: 0.3372 | Stooq: ❌
+TEF.MC: 3.579 EUR | Vola: 0.1997 | Stooq: ❌
+SAN.MC: 10.756 EUR | Vola: 0.3479 | Stooq: ✅
+------------------------------------------------------------
