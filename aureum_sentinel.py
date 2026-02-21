@@ -69,7 +69,7 @@ class AureumSentinel:
         
         # --- EXPLIZITER JITTER ---
         # Versatz zwischen 50ms und 500ms, um API-Bursts zu glätten
-        time.sleep(random.uniform(0.001, 0.005))
+        time.sleep(random.uniform(0.01, 0.05))
         
         try:
             # Stooq Abfrage
