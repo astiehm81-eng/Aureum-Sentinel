@@ -1682,3 +1682,10 @@ SAN.MC: 10.756 EUR | Vola: 0.3479 | Stooq: ✅
 [2026-02-21 23:39:38] [STATS  ] DASH       | Proc: 18 | Speed: 40.3 Ast/Min
 [2026-02-21 23:39:49] [STATS  ] DASH       | Proc: 18 | Speed: 29.0 Ast/Min
 [2026-02-21 23:39:59] [STATS  ] DASH       | Proc: 18 | Speed: 22.7 Ast/Min
+[2026-02-21 23:42:41] [SYSTEM ] START      | V269 Jitter-Turbo | Pool: 1169 | Blacklist: 0
+[2026-02-21 23:42:45] [STATS  ] DASH       | Proc: 6 | Speed: 97.8 Ast/Min
+[2026-02-21 23:42:47] [STATS  ] DASH       | Proc: 14 | Speed: 142.9 Ast/Min
+[2026-02-21 23:42:57] [STATS  ] DASH       | Proc: 14 | Speed: 51.3 Ast/Min
+[2026-02-21 23:43:08] [STATS  ] DASH       | Proc: 14 | Speed: 31.3 Ast/Min
+[2026-02-21 23:43:18] [STATS  ] DASH       | Proc: 14 | Speed: 22.6 Ast/Min
+[2026-02-21 23:43:28] [STATS  ] DASH       | Proc: 14 | Speed: 17.7 Ast/Min
