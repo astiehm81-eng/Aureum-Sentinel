@@ -8,10 +8,15 @@ on:
 jobs:
   sentinel-cycle:
     runs-on: ubuntu-latest
+    # Berechtigungen für den Push zurück ins Repo
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Holt die gesamte Historie für saubere Commits
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -21,7 +26,7 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pandas pyarrow fastparquet yfinance requests
 
       - name: Run Aureum Sentinel
         env:
@@ -32,6 +37,10 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add isin_pool.json heritage_audit.txt anchors_memory.json
-          git commit -m "Sentinel Pulse: Pool Expansion & Audit Update [V173]" || echo "No changes to commit"
-          git push
+          
+          # Stellt sicher, dass alle neuen Ordner (heritage/2020s etc.) 
+          # und die Audit-Logs erfasst werden
+          git add isin_pool.json heritage_audit.txt heritage/
+          
+          # Nur committen, wenn sich tatsächlich etwas geändert hat
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Sentinel Pulse: Year-Partitioning & Coverage Update [V261]" && git push)
