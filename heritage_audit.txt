@@ -1,10 +1,8 @@
-=== AUREUM SENTINEL V159 PULSE [2026-02-21 05:55:05] ===
-Pool-Größe: 1112 Assets
+=== AUREUM SENTINEL V160 PULSE [2026-02-21 05:59:33] ===
+Pool-Größe: 1113 Assets
 Erfolgreich: 1112
-Repariert (Suffix): 0
-Entfernt (Delisted): 0
-Neue Ankerpunkte: 0
+Neu entdeckt: 1
+Entfernt: 0
 System-Status: ✅ OK
 ----------------------------------------
-Aktive Bewegungen (Top Ticker):
-Keine Bewegungen > 0.05%
+Aktive Bewegungen erkannt.
