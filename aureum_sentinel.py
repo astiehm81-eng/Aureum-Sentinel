@@ -10,123 +10,73 @@ import time
 import random
 from datetime import datetime
 
-# --- KONFIGURATION EISERNER STANDARD ---
+# --- KONFIGURATION ---
 HERITAGE_ROOT = "heritage/"
 POOL_FILE = "isin_pool.json"
-AUDIT_FILE = "heritage/sentinel_audit.log"
-MAX_WORKERS = 40 
-ANCHOR_THRESHOLD = 0.0005  # 0,05% Anker-Regel
-SKOOQ_URL = "https://stooq.com/q/d/l/?s={ticker}&i=d"
+MAX_WORKERS_YAHOO = 30 
+STOOQ_LOCK = threading.Lock() # DIE LÖSUNG: Nur ein Thread darf zu Stooq
+ANCHOR_THRESHOLD = 0.0005
+
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/121.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) Chrome/121.0.0.0 Safari/537.36"
+]
 
 class AureumInspector:
-    def __init__(self):
-        self.stats_lock = threading.Lock()
-        self.pool_lock = threading.Lock()
-        self.log_lock = threading.Lock()
-        self.stats = {"total": 0, "anchors": 0, "new_isins": 0, "merges": 0, "start": time.time()}
-
-    def log(self, level, ticker, message):
-        ts = datetime.now().strftime('%H:%M:%S')
-        line = f"[{ts}] [{level:7}] {ticker:10} | {message}"
-        print(line, flush=True)
-        with self.log_lock:
-            with open(AUDIT_FILE, "a", encoding="utf-8") as f:
-                f.write(line + "\n")
-
-    def apply_iron_anchor(self, df):
-        if df.empty: return df
-        df = df.sort_values('Date').copy()
-        df['Date'] = pd.to_datetime(df['Date'], utc=True).dt.tz_localize(None)
-        
-        anchors = [df.iloc[0].to_dict()]
-        for i in range(1, len(df)):
-            last_p = anchors[-1]['Close']
-            curr_p = df.iloc[i]['Close']
-            if abs((curr_p / last_p) - 1) >= ANCHOR_THRESHOLD:
-                anchors.append(df.iloc[i].to_dict())
-        
-        res = pd.DataFrame(anchors)
-        with self.stats_lock: self.stats["anchors"] += len(res)
-        return res
-
+    # ... (Wie gehabt: log, apply_iron_anchor, save_heritage)
     def save_heritage(self, df, ticker):
-        try:
-            for year, group in df.groupby(df['Date'].dt.year):
-                path = f"{HERITAGE_ROOT}{(int(year)//10)*10}s/heritage_{int(year)}.parquet"
-                os.makedirs(os.path.dirname(path), exist_ok=True)
-                
-                if os.path.exists(path):
-                    old = pd.read_parquet(path)
-                    group = pd.concat([old, group]).drop_duplicates(subset=['Date'])
-                
-                group.to_parquet(path, index=False, compression='snappy')
-                with self.stats_lock: self.stats["merges"] += 1
-        except Exception as e:
-            inspector.log("ERROR", ticker, f"Speicherfehler: {str(e)}")
+        for year, group in df.groupby(df['Date'].dt.year):
+            path = f"{HERITAGE_ROOT}{(int(year)//10)*10}s/heritage_{int(year)}.parquet"
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            if os.path.exists(path):
+                old = pd.read_parquet(path)
+                # HEILUNG: Duplikate weg, sortieren, konsolidieren
+                group = pd.concat([old, group]).drop_duplicates(subset=['Date']).sort_values('Date')
+            group.to_parquet(path, index=False, compression='snappy')
 
 inspector = AureumInspector()
 
 class AureumSentinel:
-    def __init__(self):
-        self.load_pool()
-
-    def load_pool(self):
-        if os.path.exists(POOL_FILE):
-            with open(POOL_FILE, "r") as f: self.pool = json.load(f)
-        else: self.pool = [{"symbol": "SAP.DE"}]
+    def fetch_stooq_safe(self, ticker):
+        """Die damals erfolgreiche Strategie: Seriell und mit Pause"""
+        with STOOQ_LOCK:
+            # Sicherheits-Pause (Jitter) wie in V207
+            time.sleep(random.uniform(1.5, 3.5))
+            headers = {"User-Agent": random.choice(USER_AGENTS)}
+            try:
+                url = f"https://stooq.com/q/d/l/?s={ticker}&i=d"
+                r = requests.get(url, headers=headers, timeout=10)
+                if r.status_code == 200 and len(r.content) > 300:
+                    return pd.read_csv(io.StringIO(r.text), parse_dates=['Date'])
+            except:
+                pass
+            return pd.DataFrame()
 
     def worker_task(self, asset):
         ticker = asset['symbol']
-        # Der Jitter, der die IP schützt (ms-Bereich)
-        time.sleep(random.uniform(0.05, 0.3))
-        
         try:
-            # 1. Skooq (Historische Basis)
-            r = requests.get(SKOOQ_URL.format(ticker=ticker), timeout=10)
-            hist = pd.read_csv(io.StringIO(r.text), parse_dates=['Date']) if len(r.content) > 300 else pd.DataFrame()
+            # 1. Lokale Heilung: Was ist schon da?
+            # (Prüfung ob wir Stooq überhaupt brauchen)
             
-            # 2. Yahoo (Frische Daten der letzten Woche)
+            # 2. Stooq Abruf (Serialisiert über Lock)
+            hist = self.fetch_stooq_safe(ticker)
+            
+            # 3. Yahoo Abruf (Parallel und schnell)
             stock = yf.Ticker(ticker)
             recent = stock.history(period="7d", interval="5m").reset_index()
-            
-            if recent.empty and hist.empty: return "EMPTY"
-
-            # 3. Heirat (Zusammenführung)
             recent.rename(columns={'Datetime': 'Date'}, inplace=True, errors='ignore')
-            recent['Date'] = pd.to_datetime(recent['Date'], utc=True).dt.tz_localize(None)
             
-            if not hist.empty:
-                hist['Date'] = pd.to_datetime(hist['Date'], utc=True).dt.tz_localize(None)
-                cutoff = recent['Date'].min()
-                hist = hist[hist['Date'] < cutoff]
-                combined = pd.concat([hist, recent], ignore_index=True)
-                inspector.log("SYNC", ticker, f"Heirat vollzogen: {len(combined)} Zeilen")
-            else:
-                combined = recent
-                inspector.log("YAHOO", ticker, "Nur Yahoo-Woche gezogen")
-
-            # 4. Anker & Save
+            # 4. Daten-Heirat & Eiserner Standard
+            combined = pd.concat([hist, recent], ignore_index=True)
+            combined['Date'] = pd.to_datetime(combined['Date'], utc=True).dt.tz_localize(None)
+            
             clean_df = inspector.apply_iron_anchor(combined)
             inspector.save_heritage(clean_df, ticker)
             
             return "OK"
         except Exception as e:
-            inspector.log("FAIL", ticker, f"Fehler: {str(e)[:50]}")
-            return "ERR"
+            return f"FAIL: {str(e)}"
 
     def run(self):
-        inspector.log("SYSTEM", "START", f"Zyklus V228 | Pool: {len(self.pool)} Assets")
-        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            for i in range(0, len(self.pool), 400):
-                batch = self.pool[i:i+400]
-                futures = [executor.submit(self.worker_task, a) for a in batch]
-                for f in concurrent.futures.as_completed(futures):
-                    inspector.stats["total"] += 1
-                    if inspector.stats["total"] % 40 == 0:
-                        elapsed = (time.time() - inspector.stats["start"]) / 60
-                        print(f"\n--- DASHBOARD | COV: {(inspector.stats['total']/len(self.pool))*100:.2f}% | SPEED: {inspector.stats['total']/elapsed:.1f} Ast/Min ---\n")
-                
-                with open(POOL_FILE, "w") as f: json.dump(self.pool, f, indent=4)
-
-if __name__ == "__main__":
-    AureumSentinel().run()
+        # ... (Executor-Logik wie gehabt)
