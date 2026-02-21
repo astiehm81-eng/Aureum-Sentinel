@@ -14,7 +14,7 @@ HERITAGE_DIR = "heritage"
 DISCOVERY_LOG = "discovery_candidates.json" # Speicher für neue Funde
 
 # ... (Anker-Konfiguration bleibt gleich)
-MAX_WORKERS = 12
+MAX_WORKERS = 25
 
 class AureumSentinel:
     def __init__(self):
