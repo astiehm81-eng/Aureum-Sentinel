@@ -14,7 +14,7 @@ from datetime import datetime
 HERITAGE_ROOT = "heritage/"
 LIVE_TICKER_FEATHER = "heritage/live_ticker.feather"
 POOL_FILE = "isin_pool.json"
-MAX_WORKERS = 12
+MAX_WORKERS = 15
 storage_lock = threading.Lock()
 stooq_throttle_lock = threading.Lock()
 
@@ -35,38 +35,43 @@ class AureumSentinel:
 
     def fetch_stooq_with_delay(self, s_ticker):
         with stooq_throttle_lock:
-            # Der 50ms-150ms Precision Delay
             time.sleep(random.uniform(0.05, 0.15))
-            headers = {'User-Agent': f'Mozilla/5.0 (Aureum-V209; {random.random()})'}
+            headers = {'User-Agent': f'Mozilla/5.0 (Aureum-V210; {random.random()})'}
             try:
                 r = requests.get(f"https://stooq.com/q/d/l/?s={s_ticker}&i=d", headers=headers, timeout=5)
                 if len(r.content) > 300:
-                    return pd.read_csv(io.StringIO(r.text), index_col='Date', parse_dates=True)
+                    df = pd.read_csv(io.StringIO(r.text), index_col='Date', parse_dates=True)
+                    # TZ-Fix: Stooq ist meist naive, aber sicherheitshalber strippen
+                    if df.index.tz is not None: df.index = df.index.tz_localize(None)
+                    return df
             except: pass
             return None
 
     def fetch_task(self, asset):
         ticker = asset['symbol']
-        self.log("START", ticker, "Abruf läuft...")
+        self.log("START", ticker, "Batch-Abruf...")
         live_5m, gap_1d, hist_df = None, None, None
         price = 0.0
         
         try:
-            # 1. Yahoo
+            # 1. Yahoo (mit TZ-Stripping)
             stock = yf.Ticker(ticker)
             live_5m = stock.history(period="5d", interval="5m")
             gap_1d = stock.history(period="1mo", interval="1d")
+            
             if not live_5m.empty:
+                live_5m.index = live_5m.index.tz_localize(None)
                 price = live_5m['Close'].iloc[-1]
-                self.log("YAHOO", ticker, f"Preis: {price:.2f}")
+                self.log("YAHOO", ticker, f"P: {price:.2f}")
+            
+            if not gap_1d.empty:
+                gap_1d.index = gap_1d.index.tz_localize(None)
 
             # 2. Stooq
             st_ticker = ticker.upper() if "." in ticker else f"{ticker.upper()}.US"
             hist_df = self.fetch_stooq_with_delay(st_ticker)
             if hist_df is not None:
-                self.log("STOOQ", ticker, "Historie erhalten ✅")
-            else:
-                self.log("STOOQ", ticker, "Keine Daten / Block ❌")
+                self.log("STOOQ", ticker, "Historie ✅")
 
         except Exception as e:
             self.log("ERROR", ticker, f"Fehler: {str(e)}")
@@ -83,14 +88,13 @@ class AureumSentinel:
                 df_l = res['live'].copy(); df_l['Ticker'] = ticker
                 self._atomic_save(df_l.reset_index(), LIVE_TICKER_FEATHER, "feather")
 
-            # B. Heritage Deep-Storage
+            # B. Heritage (Marriage)
             if res['hist'] is not None and not res['hist'].empty:
-                # FIX: Korrekte Prüfung auf leere Dataframes
-                dfs_to_concat = [res['hist']]
+                dfs = [res['hist']]
                 if res['gap'] is not None and not res['gap'].empty:
-                    dfs_to_concat.append(res['gap'])
+                    dfs.append(res['gap'])
                 
-                combined = pd.concat(dfs_to_concat).sort_index()
+                combined = pd.concat(dfs).sort_index()
                 combined = combined[~combined.index.duplicated(keep='last')]
                 combined['Year'] = combined.index.year
                 combined['Decade'] = (combined['Year'] // 10) * 10
@@ -101,7 +105,7 @@ class AureumSentinel:
                     g = group.copy(); g['Ticker'] = ticker
                     self._atomic_save(g, path, "parquet")
 
-            # Sync-Status im Pool aktualisieren
+            # Sync-Markierung
             for a in self.pool:
                 if a['symbol'] == ticker:
                     a['last_sync'] = datetime.now().isoformat()
@@ -122,9 +126,8 @@ class AureumSentinel:
         except: pass
 
     def run(self):
-        print(f"=== AUREUM SENTINEL V209 | FULL BATCH START [{datetime.now()}] ===")
-        # Jetzt fahren wir auf 10.000 hoch, da die Architektur stabil ist
-        batch = self.pool[:10000]
+        print(f"=== AUREUM SENTINEL V210 | TZ-SAFE 10k SYNC START [{datetime.now()}] ===")
+        batch = self.pool[:10000] # Ziel: Volle 10k
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             futures = [executor.submit(self.fetch_task, a) for a in batch]
@@ -132,10 +135,10 @@ class AureumSentinel:
                 try:
                     self.safe_store(f.result())
                 except Exception as e:
-                    print(f"Storage Error: {e}")
+                    print(f"Storage Error [{datetime.now()}]: {e}")
 
         with open(POOL_FILE, "w") as f: json.dump(self.pool, f, indent=4)
-        print(f"=== Zyklus beendet. Pool-Sync abgeschlossen. ===")
+        print(f"=== Zyklus beendet. Pool aktualisiert. ===")
 
 if __name__ == "__main__":
     AureumSentinel().run()
