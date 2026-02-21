@@ -50,7 +50,7 @@ class AureumSentinel:
         self.perform_pre_flight_inspection()
 
     def init_structure(self):
-        for d in ["1990s", "2000s", "2010s", "2020s"]:
+        for d in ["1960s","1970s","1980s","1990s", "2000s", "2010s", "2020s"]:
             os.makedirs(os.path.join(HERITAGE_ROOT, d), exist_ok=True)
 
     def load_pool(self):
@@ -91,7 +91,7 @@ class AureumSentinel:
         try:
             # 1. Daten-Heirat (Immer Voll-Sync für Zeitreihen-Vervollständigung)
             with STOOQ_LOCK:
-                time.sleep(random.uniform(0.1, 0.2))
+                time.sleep(random.uniform(0.01, 0.02))
                 r = requests.get(f"https://stooq.com/q/d/l/?s={ticker}&i=d", timeout=7)
                 hist = pd.read_csv(io.StringIO(r.text)) if r.status_code == 200 else pd.DataFrame()
             
