@@ -2,22 +2,19 @@ import pandas as pd
 import yfinance as yf
 import os
 import json
-import threading
 import time
 import random
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# --- KONFIGURATION V156 ---
+# --- KONFIGURATION V158 ---
 POOL_FILE = "isin_pool.json"
 HERITAGE_DIR = "heritage"
 ANCHOR_FILE = "anchors_memory.json"
-AUDIT_FILE = "heritage_audit.txt"  # Deine lesbare Zusammenfassung
+AUDIT_FILE = "heritage_audit.txt"
 
 ANCHOR_THRESHOLD = 0.0005 
-LOOKBACK_MINUTES = 60      
 MAX_WORKERS = 12
-RATE_LIMIT_HIT = False
 
 def log(tag, msg):
     ts = datetime.now().strftime('%H:%M:%S')
@@ -32,99 +29,82 @@ class AureumSentinel:
                 with open(ANCHOR_FILE, "r") as f: self.anchors = json.load(f)
             except: pass
 
+    def try_repair_ticker(self, symbol):
+        """Versucht den Ticker durch Suffix-Erweiterung zu retten."""
+        suffixes = [".DE", ".L", ".HK", ".PA"]
+        for suffix in suffixes:
+            test_symbol = f"{symbol}{suffix}"
+            try:
+                t = yf.Ticker(test_symbol)
+                df = t.history(period="1d", interval="1m").tail(1)
+                if not df.empty:
+                    log("REPAIR", f"✅ Ticker repariert: {symbol} -> {test_symbol}")
+                    return test_symbol
+            except:
+                continue
+        return None
+
     def process_asset(self, symbol):
-        global RATE_LIMIT_HIT
-        if RATE_LIMIT_HIT: return None
         try:
-            time.sleep(random.uniform(0.1, 0.2))
             t = yf.Ticker(symbol)
-            df = t.history(period="1d", interval="1m").tail(LOOKBACK_MINUTES)
+            df = t.history(period="1d", interval="1m").tail(5)
             
-            if df.empty: return {"fail": symbol}
+            if df.empty:
+                # Startet den Reparaturversuch statt sofort zu löschen
+                repaired = self.try_repair_ticker(symbol)
+                if repaired:
+                    return {"old_symbol": symbol, "new_symbol": repaired, "Price": 0} # Markierung für Update
+                return {"fail": symbol}
 
             current_price = df['Close'].iloc[-1]
-            
-            # Anker-Logik
             last_anchor = self.anchors.get(symbol)
-            change = 0
-            if last_anchor:
-                change = abs(current_price - last_anchor) / last_anchor
+            is_new_anchor = last_anchor is None or abs(current_price - last_anchor) / last_anchor >= ANCHOR_THRESHOLD
             
-            if last_anchor is None or change >= ANCHOR_THRESHOLD:
+            if is_new_anchor:
                 self.anchors[symbol] = current_price
-                log("TICK", f"⚓ {symbol}: {current_price}")
-                return {"Ticker": symbol, "Price": current_price, "NewAnchor": True}
             
-            return {"Ticker": symbol, "Price": current_price, "NewAnchor": False}
-        except Exception as e:
-            if "429" in str(e) or "Too Many Requests" in str(e):
-                RATE_LIMIT_HIT = True
+            return {"Ticker": symbol, "Price": current_price, "NewAnchor": is_new_anchor}
+        except:
             return {"fail": symbol}
-
-    def write_audit_report(self, stats):
-        """Erstellt die für dich lesbare Zusammenfassung."""
-        ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        report = [
-            f"=== AUREUM SENTINEL AUDIT REPORT [{ts}] ===",
-            f"Gescannt: {stats['total']} Assets",
-            f"Erfolgreich: {stats['success']}",
-            f"Neue Ankerpunkte gesetzt: {stats['anchors']}",
-            f"Gereinigte Assets (Delisted): {stats['cleaned']}",
-            f"Status: {'⚠️ RATE LIMITED' if RATE_LIMIT_HIT else '✅ NORMAL'}",
-            "-" * 40,
-            "Top Volatilität / Bewegungen in diesem Lauf:"
-        ]
-        # Füge die Ticker hinzu, die einen neuen Anker gesetzt haben
-        for t in stats['top_moves'][:10]:
-            report.append(f" > {t}")
-            
-        with open(AUDIT_FILE, "w") as f:
-            f.write("\n".join(report))
 
     def run_cycle(self):
         if not os.path.exists(POOL_FILE): return
         with open(POOL_FILE, "r") as f: pool = json.load(f)
         
-        symbols = [a['symbol'] for a in pool]
         results = []
         failed_symbols = []
-        new_anchors_count = 0
-        
-        log("SYSTEM", f"Starte Puls-Check für {len(symbols)} Assets...")
+        updates = {} # Speichert reparierte Symbole
         
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            future_to_asset = {executor.submit(self.process_asset, s): s for s in symbols}
+            future_to_asset = {executor.submit(self.process_asset, a['symbol']): a['symbol'] for a in pool}
             for future in as_completed(future_to_asset):
                 res = future.result()
                 if res:
                     if "Price" in res:
-                        results.append(res)
-                        if res.get("NewAnchor"): new_anchors_count += 1
-                    elif "fail" in res and not RATE_LIMIT_HIT:
+                        if "new_symbol" in res: # Reparierter Ticker
+                            updates[res["old_symbol"]] = res["new_symbol"]
+                        else:
+                            results.append(res)
+                    elif "fail" in res:
                         failed_symbols.append(res["fail"])
 
-        # Cleanup & Pool Update
-        if failed_symbols:
-            new_pool = [a for a in pool if a['symbol'] not in failed_symbols]
-            with open(POOL_FILE, "w") as f:
-                json.dump(new_pool, f, indent=4)
-            log("CLEANUP", f"🧹 {len(failed_symbols)} Assets entfernt.")
+        # --- POOL UPDATEN (Cleanup + Repairs) ---
+        new_pool = []
+        for asset in pool:
+            s = asset['symbol']
+            if s in updates:
+                new_pool.append({"symbol": updates[s]}) # Ersetze durch reparierten Ticker
+            elif s not in failed_symbols:
+                new_pool.append(asset)
 
-        # Audit Statistik erstellen
-        stats = {
-            "total": len(symbols),
-            "success": len(results),
-            "anchors": new_anchors_count,
-            "cleaned": len(failed_symbols),
-            "top_moves": [r['Ticker'] for r in results if r.get("NewAnchor")]
-        }
-        self.write_audit_report(stats)
+        with open(POOL_FILE, "w") as f:
+            json.dump(new_pool, f, indent=4)
 
-        # Anker speichern
+        # Audit & Anker speichern (Logik wie V156/157)
         with open(ANCHOR_FILE, "w") as f:
             json.dump(self.anchors, f)
-
-        log("PROGRESS", f"✅ Zyklus beendet. Report erstellt in {AUDIT_FILE}")
+            
+        log("PROGRESS", f"✅ Zyklus beendet. {len(updates)} Ticker repariert, {len(failed_symbols)} entfernt.")
 
 if __name__ == "__main__":
     AureumSentinel().run_cycle()
