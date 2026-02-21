@@ -2,59 +2,36 @@ name: Aureum Sentinel Perpetual Sync
 
 on:
   schedule:
-    # Führt den Sentinel alle 15 Minuten aus
-    - cron: '*/15 * * * *'
-  push:
-    branches: [ main ]
-  workflow_dispatch:
-    # Erlaubt den manuellen Start über das GitHub UI
-
-# Verhindert parallele Ausführungen
-concurrency:
-  group: sentinel-sync
-  cancel-in-progress: false
+    - cron: '*/15 * * * *' # Alle 15 Minuten
+  workflow_dispatch:      # Ermöglicht manuellen Start
 
 jobs:
   sentinel-cycle:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pandas yfinance pyarrow fastparquet zstandard
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Execute Aureum Sentinel V152
-        run: python aureum_sentinel.py
+      - name: Run Aureum Sentinel
         env:
-          PYTHONUNBUFFERED: 1
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python aureum_sentinel.py
 
-      - name: Commit & Push Changes
+      - name: Commit and Push changes
         run: |
-          git config --global user.name "Aureum-Sentinel-Bot"
-          git config --global user.email "bot@aureum-sentinel.local"
-          
-          # Sicherstellen, dass neue Dateien im heritage Ordner erkannt werden
-          git add heritage/*.parquet || true
-          git add heritage/*.feather || true
-          git add isin_pool.json || true
-          git add anchors_memory.json || true
-          git add heritage_audit.txt || true
-          
-          # Nur committen, wenn sich tatsächlich etwas geändert hat
-          if git diff --staged --quiet; then
-            echo "Keine Änderungen zu synchronisieren."
-          else
-            git commit -m "Sentinel Pulse: Heritage & Audit Sync [$(date +'%Y-%m-%d %H:%M')]"
-            git push
-          fi
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add isin_pool.json heritage_audit.txt anchors_memory.json
+          git commit -m "Sentinel Pulse: Pool Expansion & Audit Update [V173]" || echo "No changes to commit"
+          git push
