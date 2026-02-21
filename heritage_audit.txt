@@ -1,7 +1,7 @@
-=== AUREUM SENTINEL V168 | WEEKEND PERSISTENCE [2026-02-21 06:19:23] ===
+=== AUREUM SENTINEL V168 | WEEKEND PERSISTENCE [2026-02-21 06:21:07] ===
 Pool-Größe: 1485 / 10000
 Status: ✅ GESCHÜTZT (Wochenende)
-Neu injiziert: 12 (Prio: Mid-Caps & China Tech)
+Neu injiziert: 0 (Prio: Mid-Caps & China Tech)
 ----------------------------------------
 HINWEIS: Historie-Check auf 5 Tage erweitert (Yahoo-Weekend-Fix).
 Lösch-Filter: DEAKTIVIERT bis Montag 08:00 Uhr.
