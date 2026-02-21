@@ -4,3 +4,5 @@ yfinance
 pyarrow
 fastparquet
 requests
+google-generativeai
+pytz
