@@ -7,126 +7,129 @@ import json
 import concurrent.futures
 import threading
 import time
+import random
 from datetime import datetime
 
-# --- STRUKTUR & LOGIK ---
+# --- KONFIGURATION ---
 HERITAGE_ROOT = "heritage/"
 POOL_FILE = "isin_pool.json"
 MAX_WORKERS = 60 
 STOOQ_LOCK = threading.Lock()
 FILE_LOCKS = {} 
 FILE_LOCKS_LOCK = threading.Lock()
-ANCHOR = 0.0005 # 0,05% Eiserner Standard
+ANCHOR = 0.0005 
 
 class AureumInspector:
     def __init__(self):
         self.stats_lock = threading.Lock()
-        self.stats = {"processed": 0, "gaps_closed": 0, "start": time.time()}
+        self.stats = {"processed": 0, "errors": 0, "start": time.time()}
 
     def log(self, level, ticker, message):
-        ts = datetime.now().strftime('%H:%M:%S')
-        print(f"[{ts}] [{level:7}] {ticker:10} | {message}", flush=True)
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] [{level:7}] {ticker:10} | {message}", flush=True)
 
     def get_lock(self, path):
         with FILE_LOCKS_LOCK:
             if path not in FILE_LOCKS: FILE_LOCKS[path] = threading.Lock()
             return FILE_LOCKS[path]
 
-    def apply_iron_standard(self, df):
-        """Kern-Anforderung: Zeitreihen-Vervollständigung & Anker-Filterung"""
-        if df.empty: return df
-        df = df.sort_values('Date').drop_duplicates(subset=['Date'])
-        df['Date'] = pd.to_datetime(df['Date'], utc=True).dt.tz_localize(None)
+    def safe_normalize(self, df):
+        """Wäscht Zeitstempel und entfernt Zeitzonen radikal"""
+        if df is None or df.empty: return pd.DataFrame()
+        if 'Date' not in df.columns and 'Datetime' in df.columns:
+            df = df.rename(columns={'Datetime': 'Date'})
+        if 'Date' not in df.columns: return pd.DataFrame()
         
-        # Anker-Logik zur Rauschreduzierung
-        anchors = [df.iloc[0].to_dict()]
-        for i in range(1, len(df)):
-            last_p = anchors[-1]['Close']
-            curr_p = df.iloc[i]['Close']
-            if abs((curr_p / last_p) - 1) >= ANCHOR:
-                anchors.append(df.iloc[i].to_dict())
-        return pd.DataFrame(anchors)
+        df['Date'] = pd.to_datetime(df['Date'], utc=True).dt.tz_localize(None)
+        return df
 
 inspector = AureumInspector()
 
 class AureumSentinel:
     def __init__(self):
         self.load_pool()
-        self.ensure_structure()
-
-    def ensure_structure(self):
-        """Erzeugt Dekaden-Ordner falls nötig"""
-        for d in ["1990s", "2000s", "2010s", "2020s"]:
-            os.makedirs(os.path.join(HERITAGE_ROOT, d), exist_ok=True)
+        os.makedirs(HERITAGE_ROOT, exist_ok=True)
 
     def load_pool(self):
         if os.path.exists(POOL_FILE):
             with open(POOL_FILE, "r") as f: self.pool = json.load(f)
         else: self.pool = [{"symbol": "SAP.DE"}]
 
+    def fetch_stooq_safe(self, ticker):
+        """Robustes Parsen: Verhindert 'Missing Column Date' Fehler"""
+        with STOOQ_LOCK:
+            time.sleep(random.uniform(0.2, 0.4))
+            try:
+                r = requests.get(f"https://stooq.com/q/d/l/?s={ticker}&i=d", timeout=7)
+                if r.status_code == 200 and len(r.content) > 100:
+                    df = pd.read_csv(io.StringIO(r.text))
+                    if 'Date' in df.columns: return df
+            except: pass
+        return pd.DataFrame()
+
     def worker_task(self, asset):
         ticker = asset['symbol']
         try:
-            # 1. AKQUISE (Historie + Aktuell)
-            # Stooq für die Tiefe (Vervollständigung)
-            with STOOQ_LOCK:
-                time.sleep(random.uniform(0.3, 0.6))
-                r = requests.get(f"https://stooq.com/q/d/l/?s={ticker}&i=d", timeout=7)
-                hist = pd.read_csv(io.StringIO(r.text), parse_dates=['Date']) if r.status_code == 200 else pd.DataFrame()
-            
-            # Yahoo für die letzte Woche (Heirat)
+            # 1. DATEN-AKQUISE
+            hist = self.fetch_stooq_safe(ticker)
             recent = yf.Ticker(ticker).history(period="7d", interval="5m").reset_index()
-            recent.rename(columns={'Datetime': 'Date'}, inplace=True, errors='ignore')
-
-            # 2. INTEGRATION (Der "Oberaufseher" Mechanismus)
+            
+            # 2. WASCHEN & HEIRATEN
+            hist = inspector.safe_normalize(hist)
+            recent = inspector.safe_normalize(recent)
+            
             full_series = pd.concat([hist, recent], ignore_index=True)
-            if full_series.empty: return
+            if full_series.empty: 
+                inspector.log("SKIP", ticker, "Keine Daten gefunden.")
+                return
 
-            # Jedes Jahr der Zeitreihe muss einzeln in die richtige Datei wandern
-            for year, group in full_series.groupby(pd.to_datetime(full_series['Date']).dt.year):
+            # 3. VERTEILUNG AUF JAHRES-DATEIEN (Oberaufseher)
+            full_series['Year'] = full_series['Date'].dt.year
+            for year, group in full_series.groupby('Year'):
                 decade_dir = os.path.join(HERITAGE_ROOT, f"{(int(year)//10)*10}s")
                 os.makedirs(decade_dir, exist_ok=True)
                 file_path = os.path.join(decade_dir, f"{int(year)}.parquet")
 
                 with inspector.get_lock(file_path):
-                    # Laden der bestehenden Jahres-Daten für dieses Asset (falls vorhanden)
-                    existing_data = pd.DataFrame()
+                    # Datei laden und säubern
                     if os.path.exists(file_path):
-                        existing_data = pd.read_parquet(file_path)
-                    
-                    # Verschmelzen & Zeitreihen vervollständigen
-                    # Wir filtern das aktuelle Asset aus der Jahresdatei und fügen die neuen Daten hinzu
-                    other_assets = existing_data[existing_data.get('Ticker', '') != ticker] if not existing_data.empty else pd.DataFrame()
-                    
-                    # Das aktuelle Asset wird neu berechnet (Eiserner Standard)
-                    current_asset_old = existing_data[existing_data.get('Ticker', '') == ticker] if not existing_data.empty else pd.DataFrame()
-                    merged_asset = pd.concat([current_asset_old, group], ignore_index=True)
-                    
-                    # Wichtig: Hier wird die Zeitreihe für das Jahr finalisiert
-                    final_asset_year = inspector.apply_iron_standard(merged_asset)
-                    final_asset_year['Ticker'] = ticker # Spalte für den Oberaufseher
+                        db = pd.read_parquet(file_path)
+                        db = inspector.safe_normalize(db)
+                        # Altes Asset-Fragment entfernen für sauberen Neu-Eintrag (Vervollständigung)
+                        if 'Ticker' in db.columns:
+                            db = db[db['Ticker'] != ticker]
+                    else:
+                        db = pd.DataFrame()
 
-                    # Zurück in die Jahres-Datei schreiben
-                    final_df = pd.concat([other_assets, final_asset_year], ignore_index=True)
-                    final_df.to_parquet(file_path, index=False, compression='snappy')
+                    # Neuen Eiserner Standard Anker für dieses Asset berechnen
+                    group = group.sort_values('Date').drop_duplicates(subset=['Date'])
+                    anchors = [group.iloc[0].to_dict()]
+                    for i in range(1, len(group)):
+                        if abs((group.iloc[i]['Close'] / anchors[-1]['Close']) - 1) >= ANCHOR:
+                            anchors.append(group.iloc[i].to_dict())
+                    
+                    asset_final = pd.DataFrame(anchors)
+                    asset_final['Ticker'] = ticker
+                    
+                    # Zusammenführen mit dem Rest des Marktes in dieser Jahres-Datei
+                    new_db = pd.concat([db, asset_final], ignore_index=True)
+                    new_db.to_parquet(file_path, index=False, compression='snappy')
 
-            inspector.log("STABLE", ticker, f"Zeitreihe vervollständigt.")
+            inspector.log("DONE", ticker, "Sync & Year-Partition stabil.")
             with inspector.stats_lock: inspector.stats["processed"] += 1
         except Exception as e:
-            inspector.log("ERROR", ticker, f"Sync fehlgeschlagen: {str(e)[:50]}")
+            inspector.log("FAIL", ticker, f"Fehler: {str(e)[:45]}")
+            with inspector.stats_lock: inspector.stats["errors"] += 1
 
     def run(self):
-        inspector.log("SYSTEM", "START", f"V258 Sync & Repair Mode | Pool: {len(self.pool)}")
+        inspector.log("SYSTEM", "START", f"V259 Robust Mode | Pool: {len(self.pool)}")
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            for i in range(0, len(self.pool), 300):
-                batch = self.pool[i:i+300]
+            for i in range(0, len(self.pool), 400):
+                batch = self.pool[i:i+400]
                 futures = [executor.submit(self.worker_task, a) for a in batch]
                 concurrent.futures.wait(futures)
                 
-                # Status Update
                 elapsed = (time.time() - inspector.stats['start']) / 60
-                print(f"\n[MISSION CONTROL] Coverage: {inspector.stats['processed']} Assets | Speed: {inspector.stats['processed']/elapsed:.1f} Ast/Min\n")
+                print(f"\n[DASHBOARD] {inspector.stats['processed']} OK | {inspector.stats['errors']} FAIL | Speed: {inspector.stats['processed']/elapsed:.1f} Ast/Min\n")
 
 if __name__ == "__main__":
-    import random # Sicherstellen, dass random für den Jitter da ist
     AureumSentinel().run()
