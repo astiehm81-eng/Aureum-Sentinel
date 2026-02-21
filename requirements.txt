@@ -1,5 +1,6 @@
 pandas
+pandas-datareader
 yfinance
-lxml
-html5lib
+pyarrow
+fastparquet
 requests
