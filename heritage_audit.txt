@@ -1,6 +1,7 @@
-=== AUREUM SENTINEL V178 | HYBRID VOYAGER [2026-02-21 10:56:15] ===
+=== AUREUM SENTINEL V180 | WIKI-DOMINANCE [2026-02-21 11:43:03] ===
 Pool-Größe: 1485 / 10000
-Zuwachs: +0
-Status: 💤 IDLE
+Status: ✅ UNABHÄNGIG (Keine KI-Quota)
+Neu extrahiert: +0 Assets
+Fortschritt: 14.85%
 ----------------------------------------
-Strategie: Zweigleisiges Mining (AI & Wikipedia Scraper).
+Strategie: Direktes Scraping globaler Leit-Indizes von Wikipedia.
