@@ -1,7 +1,7 @@
-=== AUREUM SENTINEL V166 | GEMINI MASTER-INFLUX [2026-02-21 06:13:56] ===
-Pool-Größe: 1473 / 10000
-Neu injiziert: 350
-Fortschritt: 14.73%
+=== AUREUM SENTINEL V168 | WEEKEND PERSISTENCE [2026-02-21 06:19:23] ===
+Pool-Größe: 1485 / 10000
+Status: ✅ GESCHÜTZT (Wochenende)
+Neu injiziert: 12 (Prio: Mid-Caps & China Tech)
 ----------------------------------------
-Strategie: Direkter Knowledge-Transfer von Gemini-Datenbanken.
-Fokus: Blue-Chips, Mid-Caps und globale Suffix-Validierung.
+HINWEIS: Historie-Check auf 5 Tage erweitert (Yahoo-Weekend-Fix).
+Lösch-Filter: DEAKTIVIERT bis Montag 08:00 Uhr.
