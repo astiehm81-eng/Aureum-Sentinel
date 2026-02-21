@@ -14,7 +14,7 @@ ANCHOR_FILE = "anchors_memory.json"
 AUDIT_FILE = "heritage_audit.txt"
 
 ANCHOR_THRESHOLD = 0.0005 
-MAX_WORKERS = 12
+MAX_WORKERS = 25
 
 def log(tag, msg):
     ts = datetime.now().strftime('%H:%M:%S')
