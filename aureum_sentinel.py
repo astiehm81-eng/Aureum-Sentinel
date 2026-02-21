@@ -17,7 +17,7 @@ DISCOVERY_FILE = "discovery_candidates.json"
 
 ANCHOR_THRESHOLD = 0.0005 
 LOOKBACK_MINUTES = 60      
-MAX_WORKERS = 25          
+MAX_WORKERS = 50         
 RATE_LIMIT_HIT = False
 
 # --- HILFSFUNKTIONEN ---
