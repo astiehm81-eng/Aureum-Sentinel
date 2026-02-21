@@ -1,7 +1,5 @@
 pandas
 yfinance
-pyarrow
-fastparquet
+lxml
+html5lib
 requests
-google-genai
-pytz
