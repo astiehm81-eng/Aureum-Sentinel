@@ -5,90 +5,145 @@ import io
 import os
 import json
 import concurrent.futures
-from datetime import datetime, timedelta
+import threading
+from datetime import datetime
 
-# --- KONFIGURATION EISERNER STANDARD ---
+# --- HOCHLEISTUNGS-KONFIGURATION ---
+HERITAGE_ROOT = "heritage/"
+LIVE_TICKER_FEATHER = "heritage/live_ticker.feather"
 POOL_FILE = "isin_pool.json"
-HERITAGE_DB = "aureum_heritage_db.json"
 AUDIT_FILE = "heritage_audit.txt"
-ANCHOR_THRESHOLD = 0.0005  # 0,05% Anker
-MAX_WORKERS = 12           # Zurück auf 12 parallele Worker
+MAX_WORKERS = 20  # Worker hochgefahren
+storage_lock = threading.Lock() # Globaler Schutz gegen Race-Conditions
 
 class AureumSentinel:
     def __init__(self):
-        self.headers = {'User-Agent': 'Mozilla/5.0'}
-        self.load_data()
+        os.makedirs(HERITAGE_ROOT, exist_ok=True)
+        self.load_pool()
+        self.audit_logs = []
 
-    def load_data(self):
+    def load_pool(self):
         if os.path.exists(POOL_FILE):
-            with open(POOL_FILE, "r") as f: self.pool = json.load(f)
-        else: self.pool = []
-        
-        if os.path.exists(HERITAGE_DB):
-            with open(HERITAGE_DB, "r") as f: self.db = json.load(f)
-        else: self.db = {}
+            with open(POOL_FILE, "r") as f: 
+                self.pool = json.load(f)
+            # Priorisierung: Assets, die am längsten kein Update hatten
+            self.pool.sort(key=lambda x: x.get('last_sync', '1900-01-01'))
+        else: 
+            self.pool = []
 
-    def fetch_asset_data(self, asset):
-        """Die 'Marriage' für ein einzelnes Asset (Stooq + Yahoo)."""
+    def log_market(self, ticker, price, status):
+        ts = datetime.now().strftime('%H:%M:%S')
+        icon = "✅" if status == "FULL" else "⚠️"
+        print(f"[{ts}] {icon} {ticker:8} | Preis: {price:10.2f} | Status: {status}")
+
+    def fetch_worker_task(self, asset):
+        """Worker-Logik: Daten sammeln (Kein Schreiben)"""
         ticker = asset['symbol']
-        results = {"ticker": ticker, "status": "failed"}
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0'}
         
+        live_5m, gap_fill_1d, hist_df = None, None, None
+        current_price = 0.0
+        stooq_status = "❌"
+
         try:
-            # 1. Stooq (Jahrzehnte Historie)
-            stooq_sym = ticker.split('.')[0].lower()
-            stooq_url = f"https://stooq.com/q/d/l/?s={stooq_sym}&i=d"
-            stooq_res = requests.get(stooq_url, headers=self.headers, timeout=10)
-            
-            # 2. Yahoo (Letzte Woche 5m/Daily)
-            yahoo_data = yf.Ticker(ticker).history(period="7d")
-            
-            if not yahoo_data.empty:
-                current_price = yahoo_data['Close'].iloc[-1]
-                vola = yahoo_data['Close'].pct_change().std() * (252**0.5)
-                
-                results = {
-                    "ticker": ticker,
-                    "price": round(current_price, 4),
-                    "vola": round(vola, 4),
-                    "stooq_ok": len(stooq_res.content) > 100,
-                    "status": "success",
-                    "timestamp": datetime.now().isoformat()
-                }
+            # 1. Yahoo (Live & Gap)
+            stock = yf.Ticker(ticker)
+            live_5m = stock.history(period="7d", interval="5m")
+            gap_fill_1d = stock.history(period="1mo", interval="1d")
+            if not live_5m.empty:
+                current_price = live_5m['Close'].iloc[-1]
+
+            # 2. Stooq (Heimatmarkt)
+            r = requests.get(f"https://stooq.com/q/d/l/?s={ticker.lower()}&i=d", headers=headers, timeout=5)
+            if len(r.content) > 200:
+                hist_df = pd.read_csv(io.StringIO(r.text), index_col='Date', parse_dates=True)
+                stooq_status = "✅"
         except Exception as e:
-            results["error"] = str(e)
-            
-        return results
+            pass
 
-    def run_parallel_sync(self):
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Pulse-Check mit 12 Workern...")
+        status = "FULL" if (stooq_status == "✅" and current_price > 0) else "PARTIAL"
+        self.log_market(ticker, current_price, status)
         
-        # Wir nehmen die nächsten 120 Assets aus dem Pool zur Bearbeitung
-        work_queue = self.pool[:120] 
-        final_reports = []
+        return {
+            "ticker": ticker, "price": current_price, "hist": hist_df, 
+            "live": live_5m, "gap": gap_fill_1d, "stooq": stooq_status
+        }
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            future_to_ticker = {executor.submit(self.fetch_asset_data, a): a for a in work_queue}
+    def safe_storage_manager(self, res):
+        """Zentraler Manager: Nur ein Thread schreibt zur Zeit."""
+        if not res: return
+        
+        with storage_lock:
+            ticker = res['ticker']
             
-            for future in concurrent.futures.as_completed(future_to_ticker):
-                res = future.result()
-                if res["status"] == "success":
-                    msg = f"{res['ticker']}: {res['price']} EUR | Vola: {res['vola']} | Stooq: {'✅' if res['stooq_ok'] else '❌'}"
-                    final_reports.append(msg)
-                    print(f"[AUDIT] {msg}")
+            # A. Live-Ticker (Feather)
+            if res['live'] is not None and not res['live'].empty:
+                df_live = res['live'].copy()
+                df_live['Ticker'] = ticker
+                self._atomic_save(df_live.reset_index(), LIVE_TICKER_FEATHER, "feather")
 
-        self.generate_audit_report(final_reports)
+            # B. Heritage Deep-Storage (Jahrzehnt-Ordner / Jahres-Parquet)
+            if res['hist'] is not None:
+                # Heirat Stooq + Yahoo Gap
+                combined = res['hist']
+                if res['gap'] is not None:
+                    combined = pd.concat([res['hist'], res['gap']]).sort_index()
+                    combined = combined[~combined.index.duplicated(keep='last')]
+                
+                # Partitionierung
+                combined['Year'] = combined.index.year
+                combined['Decade'] = (combined['Year'] // 10) * 10
+                
+                for (decade, year), group in combined.groupby(['Decade', 'Year']):
+                    decade_dir = f"{HERITAGE_ROOT}{int(decade)}s/"
+                    os.makedirs(decade_dir, exist_ok=True)
+                    path = f"{decade_dir}heritage_{int(year)}.parquet"
+                    
+                    group = group.copy()
+                    group['Ticker'] = ticker
+                    self._atomic_save(group, path, "parquet")
 
-    def generate_audit_report(self, reports):
-        ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            # Update Sync-Timestamp im Pool
+            self.audit_logs.append(f"{ticker}: {res['price']} | Stooq: {res['stooq']}")
+            for a in self.pool:
+                if a['symbol'] == ticker:
+                    a['last_sync'] = datetime.now().isoformat()
+                    break
+
+    def _atomic_save(self, df, path, fmt):
+        """Sichert Dateiintegrität durch .tmp und .replace"""
+        if os.path.exists(path):
+            try:
+                old = pd.read_parquet(path) if fmt == "parquet" else pd.read_feather(path)
+                combined = pd.concat([old, df])
+                # Deduplizierung über Ticker und Zeitstempel
+                idx = combined.index.name or ('Date' if 'Date' in combined.columns else 'Datetime')
+                combined = combined.reset_index().drop_duplicates(subset=[idx, 'Ticker']).set_index(idx)
+            except: combined = df
+        else: combined = df
+        
+        tmp = path + ".tmp"
+        if fmt == "parquet": combined.to_parquet(tmp)
+        else: combined.to_feather(tmp)
+        os.replace(tmp, path)
+
+    def run(self):
+        print(f"=== AUREUM SENTINEL V202 | WORKER BOOST (20) START [{datetime.now()}] ===")
+        # Batch von 200 Assets für hohe Auslastung
+        batch = self.pool[:200]
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = [executor.submit(self.fetch_worker_task, a) for a in batch]
+            for f in concurrent.futures.as_completed(futures):
+                self.safe_storage_manager(f.result())
+
+        # Finales Pool-Update & Audit
+        with open(POOL_FILE, "w") as f: json.dump(self.pool, f, indent=4)
         with open(AUDIT_FILE, "w", encoding="utf-8") as f:
-            f.write(f"=== AUREUM SENTINEL V188 | PARALLEL HERITAGE [{ts}] ===\n")
-            f.write(f"Worker-Threads: {MAX_WORKERS} | Abdeckung: Stooq & Yahoo Hybrid\n")
-            f.write("-" * 60 + "\n")
-            if reports:
-                f.write("\n".join(reports))
-            else:
-                f.write("Keine Daten extrahiert. Prüfe Internetverbindung/Ticker-Validität.")
-            f.write("\n" + "-" * 60 + "\n")
+            f.write(f"=== HERITAGE AUDIT {datetime.now()} ===\n")
+            f.write("\n".join(self.audit_logs))
+        
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Batch abgeschlossen.")
 
 if __name__ == "__main__":
-    AureumSentinel().run_parallel_sync()
+    AureumSentinel().run()
