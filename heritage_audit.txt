@@ -1,10 +1,8 @@
-AUREUM SENTINEL AUDIT - 2026-02-20 23:41:16.240893
-Assets im System: 325
-- heritage_1960s.parquet: 0.15 MB
-- heritage_1970s.parquet: 0.36 MB
-- heritage_1980s.parquet: 1.21 MB
-- heritage_1990s.parquet: 2.07 MB
-- heritage_2000s.parquet: 3.20 MB
-- heritage_2010s.parquet: 3.32 MB
-- heritage_2020s.parquet: 2.36 MB
-- live_buffer.parquet: 0.02 MB
+=== AUREUM SENTINEL AUDIT REPORT [2026-02-21 05:24:56] ===
+Gescannt: 1931 Assets
+Erfolgreich: 1327
+Neue Ankerpunkte gesetzt: 0
+Gereinigte Assets (Delisted): 79
+Status: ⚠️ RATE LIMITED
+----------------------------------------
+Top Volatilität / Bewegungen in diesem Lauf:
