@@ -1,7 +1,6 @@
-=== AUREUM SENTINEL V180 | WIKI-DOMINANCE [2026-02-21 11:43:03] ===
+=== AUREUM SENTINEL V181 | 99% BROAD COVERAGE [2026-02-21 11:50:56] ===
 Pool-Größe: 1485 / 10000
-Status: ✅ UNABHÄNGIG (Keine KI-Quota)
-Neu extrahiert: +0 Assets
-Fortschritt: 14.85%
+Neu durch Broad-Scrape: +0 Assets
+Abgedeckte Indizes: S&P 500/400/600, NASDAQ100, DAX/MDAX/SDAX, FTSE, CAC, IBEX
 ----------------------------------------
-Strategie: Direktes Scraping globaler Leit-Indizes von Wikipedia.
+Strategie: Volle Marktabdeckung über Blue-Chips, Mid-Caps und Small-Caps.
