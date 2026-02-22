@@ -5,24 +5,24 @@ import json
 import concurrent.futures
 import threading
 import time
+import logging
 from datetime import datetime
 
-# --- CONFIG V281 (STEADY-FLOW) ---
+# Yahoo Finance Logger auf "Nur Kritisch" setzen, um das Log sauber zu halten
+logging.getLogger('yfinance').setLevel(logging.CRITICAL)
+
+# --- CONFIG V282 ---
 MAX_WORKERS = 100 
 HERITAGE_ROOT = "heritage/"
 POOL_FILE = "isin_pool.json"
 BLACKLIST_FILE = "blacklist.json"
-AUDIT_FILE = "heritage_audit.txt"
 
-class AureumSentinelV281:
+class AureumSentinelV282:
     def __init__(self):
         self.stats_lock = threading.Lock()
         self.stats = {
-            "done": 0, 
-            "err": 0, 
-            "start": time.time(), 
-            "total_pool": 0,
-            "blacklisted_now": 0
+            "done": 0, "err": 0, "start": time.time(), 
+            "total_pool": 0, "blacklisted_now": 0
         }
         self.load_resources()
 
@@ -52,24 +52,25 @@ class AureumSentinelV281:
         self.stats["total_pool"] = len(self.pool)
 
     def print_dashboard(self):
-        with self.stats_lock:
-            elapsed = (time.time() - self.stats['start']) / 60
-            done = self.stats['done']
-            total = self.stats['total_pool']
-            speed = done / elapsed if elapsed > 0 else 0
-            coverage = (done / total * 100) if total > 0 else 0
-            
-            print(f"\n[DASHBOARD] {datetime.now().strftime('%H:%M:%S')}")
-            print(f"Progress: [{done}/{total}] ({coverage:.1f}%) | Speed: {speed:.1f} a/m")
-            print(f"Status:   {self.stats['err']} Errors | {self.stats['blacklisted_now']} Blacklisted\n", flush=True)
+        elapsed = (time.time() - self.stats['start']) / 60
+        done = self.stats['done']
+        total = self.stats['total_pool']
+        speed = done / elapsed if elapsed > 0 else 0
+        coverage = (done / total * 100) if total > 0 else 0
+        
+        print(f"\n" + "="*50)
+        print(f"📊 AUREUM PROGRESS: [{done}/{total}] ({coverage:.1f}%)")
+        print(f"🚀 SPEED: {speed:.1f} assets/min | ERRORS: {self.stats['err']}")
+        print(f"🚫 BLACKLISTED THIS RUN: {self.stats['blacklisted_now']}")
+        print("="*50 + "\n", flush=True)
 
     def worker_task(self, asset):
         ticker = asset['symbol']
         try:
-            # Batch-Download für Stabilität
-            df = yf.download(ticker, period="5d", interval="5m", progress=False, group_by='ticker', timeout=10)
+            # yfinance download mit absoluter Stille
+            df = yf.download(ticker, period="5d", interval="5m", progress=False, group_by='ticker', threads=False)
             
-            if df.empty:
+            if df is None or df.empty:
                 with self.stats_lock:
                     self.blacklist.add(ticker)
                     self.stats["blacklisted_now"] += 1
@@ -82,31 +83,33 @@ class AureumSentinelV281:
             df_save = df.reset_index()
             df_save['Ticker'] = ticker
             
-            # Atomic Write
             with self.stats_lock:
                 if os.path.exists(path):
-                    # Nur neue Daten anfügen (Delta)
                     existing = pd.read_parquet(path)
                     pd.concat([existing, df_save]).drop_duplicates(subset=['Date', 'Ticker']).to_parquet(path, index=False)
                 else:
                     df_save.to_parquet(path, index=False)
                 self.stats["done"] += 1
-        except:
+        except Exception:
             with self.stats_lock: self.stats["err"] += 1
 
     def run(self):
-        print(f"🚀 V281 Start | Pool: {self.stats['total_pool']} | Workers: {MAX_WORKERS}")
+        print(f"Starting V282 | Pool: {self.stats['total_pool']} | Workers: {MAX_WORKERS}")
         
+        # Nutzen von as_completed für ein echtes Live-Dashboard
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            # Batches von 50 für regelmäßige Dashboard-Updates
-            for i in range(0, len(self.pool), 50):
-                batch = self.pool[i:i+50]
-                executor.map(self.worker_task, batch)
-                self.print_dashboard()
+            future_to_ticker = {executor.submit(self.worker_task, a): a for a in self.pool}
+            
+            counter = 0
+            for future in concurrent.futures.as_completed(future_to_ticker):
+                counter += 1
+                # Alle 25 Assets das Dashboard aktualisieren
+                if counter % 25 == 0 or counter == self.stats['total_pool']:
+                    self.print_dashboard()
                 
         # Blacklist final speichern
         with open(BLACKLIST_FILE, "w") as f:
             json.dump(list(self.blacklist), f, indent=4)
 
 if __name__ == "__main__":
-    AureumSentinelV281().run()
+    AureumSentinelV282().run()
