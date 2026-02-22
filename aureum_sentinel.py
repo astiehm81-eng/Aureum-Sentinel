@@ -10,10 +10,11 @@ import time
 import random
 from datetime import datetime
 
-# --- KONFIGURATION ---
+# --- KONFIGURATION (GOLDENER STANDARD) ---
 HERITAGE_ROOT = "heritage/"
 POOL_FILE = "isin_pool.json"
 AUDIT_FILE = "heritage_audit.txt"
+BLACKLIST_FILE = "blacklist.json"
 MAX_WORKERS = 200
 STOOQ_LOCK = threading.Lock()
 FILE_LOCKS = {}
@@ -23,9 +24,10 @@ ANCHOR_THRESHOLD = 0.0005
 class AureumInspector:
     def __init__(self):
         self.stats_lock = threading.Lock()
+        self.error_registry = {}
         self.stats = {
             "processed": 0, "errors": 0, "start": time.time(),
-            "found_in_db": 0, "pool_total": 0, "coverage_pct": 0.0
+            "found_in_db": 0, "pool_total": 0, "new_isin_found": 0
         }
 
     def log(self, level, ticker, message):
@@ -46,85 +48,102 @@ inspector = AureumInspector()
 class AureumSentinel:
     def __init__(self):
         self.init_structure()
-        self.load_pool()
+        self.blacklist = self.load_json(BLACKLIST_FILE, set)
+        self.load_and_refine_pool()
         self.perform_pre_flight_inspection()
 
     def init_structure(self):
         for d in ["1960s","1970s","1980s","1990s", "2000s", "2010s", "2020s"]:
             os.makedirs(os.path.join(HERITAGE_ROOT, d), exist_ok=True)
 
-    def load_pool(self):
-        if os.path.exists(POOL_FILE):
-            with open(POOL_FILE, "r") as f: self.pool = json.load(f)
-        else: self.pool = [{"symbol": "SAP.DE"}]
-        inspector.stats["pool_total"] = len(self.pool)
+    def load_json(self, path, type_func):
+        if os.path.exists(path):
+            with open(path, "r") as f: return type_func(json.load(f))
+        return type_func()
+
+    def load_and_refine_pool(self):
+        """Filtert Dubletten auf Fremd-Marktplätzen und wählt Heimatmarkt"""
+        raw_pool = self.load_json(POOL_FILE, list)
+        inspector.stats["pool_total"] = len(raw_pool)
+        
+        refined = {}
+        for entry in raw_pool:
+            ticker = entry['symbol']
+            if ticker in self.blacklist: continue
+            
+            base = ticker.split('.')[0]
+            # Heimatmarkt-Logik: US (kein Punkt) oder DE (.DE) haben Vorrang
+            if base not in refined:
+                refined[base] = entry
+            else:
+                current = refined[base]['symbol']
+                if '.' not in ticker: refined[base] = entry # US gewinnt
+                elif '.DE' in ticker and '.' in current: refined[base] = entry # DE schlägt Rest-EU
+        
+        self.pool = list(refined.values())
+        inspector.log("SYSTEM", "POOL", f"Refined: {len(self.pool)} Primär-Assets (von {inspector.stats['pool_total']})")
 
     def perform_pre_flight_inspection(self):
-        """
-        Scannt die Datenbank, um Dubletten zu vermeiden und 
-        die echte Marktabdeckung zu ermitteln.
-        """
-        inspector.log("SYSTEM", "INSPECT", "Starte Datenbank-Scan zur Marktabdeckung...")
-        found_tickers = set()
-        
-        # Durchsuche alle Jahre in allen Dekaden
+        found = set()
         for root, _, files in os.walk(HERITAGE_ROOT):
             for f in files:
                 if f.endswith(".parquet"):
                     try:
-                        # Wir lesen nur die Ticker-Spalte für Speed
                         df = pd.read_parquet(os.path.join(root, f), columns=['Ticker'])
-                        found_tickers.update(df['Ticker'].unique())
+                        found.update(df['Ticker'].unique())
                     except: pass
-        
-        inspector.stats["found_in_db"] = len(found_tickers)
-        if inspector.stats["pool_total"] > 0:
-            inspector.stats["coverage_pct"] = (len(found_tickers) / inspector.stats["pool_total"]) * 100
-        
-        # STATUS-LOGGING AM ANFANG
-        inspector.log("STATUS", "GLOBAL", f"Assets in DB: {inspector.stats['found_in_db']}")
-        inspector.log("STATUS", "GLOBAL", f"ISIN-Pool:    {inspector.stats['pool_total']}")
-        inspector.log("STATUS", "GLOBAL", f"Abdeckung:    {inspector.stats['coverage_pct']:.2f}%")
+        inspector.stats["found_in_db"] = len(found)
+        inspector.log("STATUS", "GLOBAL", f"Abdeckung: {len(found)} Assets in DB | {len(self.pool)} im Ziel-Pool")
+
+    def update_blacklist(self, ticker):
+        with inspector.stats_lock:
+            count = inspector.error_registry.get(ticker, 0) + 1
+            inspector.error_registry[ticker] = count
+            if count >= 3:
+                self.blacklist.add(ticker)
+                with open(BLACKLIST_FILE, "w") as f:
+                    json.dump(list(self.blacklist), f, indent=4)
+                inspector.log("BLACK", ticker, "Permanent auf Blacklist verschoben.")
 
     def worker_task(self, asset):
         ticker = asset['symbol']
         try:
-            # 1. Daten-Heirat (Immer Voll-Sync für Zeitreihen-Vervollständigung)
             with STOOQ_LOCK:
                 time.sleep(random.uniform(0.001, 0.005))
                 r = requests.get(f"https://stooq.com/q/d/l/?s={ticker}&i=d", timeout=7)
                 hist = pd.read_csv(io.StringIO(r.text)) if r.status_code == 200 else pd.DataFrame()
             
-            recent = yf.Ticker(ticker).history(period="7d", interval="5m").reset_index()
+            y_ticker = yf.Ticker(ticker)
+            recent = y_ticker.history(period="7d", interval="5m").reset_index()
             
-            # Normalisierung & Eiserner Standard
-            df_raw = pd.concat([self.clean_df(hist), self.clean_df(recent)])
-            if df_raw.empty: return
+            df = pd.concat([self.clean_df(hist), self.clean_df(recent)])
+            if df.empty: raise ValueError("Empty")
+
+            df = df.sort_values('Date').drop_duplicates(subset=['Date'])
+            last_price = df.iloc[-1]['Close']
             
-            df_raw = df_raw.sort_values('Date').drop_duplicates(subset=['Date'])
-            anchors = [df_raw.iloc[0].to_dict()]
-            for i in range(1, len(df_raw)):
-                if abs((df_raw.iloc[i]['Close'] / anchors[-1]['Close']) - 1) >= ANCHOR_THRESHOLD:
-                    anchors.append(df_raw.iloc[i].to_dict())
+            # Anker-Logik
+            anchors = [df.iloc[0].to_dict()]
+            for i in range(1, len(df)):
+                if abs((df.iloc[i]['Close'] / anchors[-1]['Close']) - 1) >= ANCHOR_THRESHOLD:
+                    anchors.append(df.iloc[i].to_dict())
             
-            # 2. In Jahres-Dateien integrieren
             final_df = pd.DataFrame(anchors)
             for year, group in final_df.groupby(final_df['Date'].dt.year):
                 decade = f"{(int(year)//10)*10}s"
                 path = os.path.join(HERITAGE_ROOT, decade, f"{int(year)}.parquet")
-                
                 with inspector.get_lock(path):
                     db = pd.read_parquet(path) if os.path.exists(path) else pd.DataFrame()
-                    if not db.empty and 'Ticker' in db.columns:
-                        db = db[db['Ticker'] != ticker] # Replace für Vollständigkeit
-                    
+                    if not db.empty: db = db[db['Ticker'] != ticker]
                     group['Ticker'] = ticker
                     pd.concat([db, group], ignore_index=True).to_parquet(path, index=False, compression='snappy')
 
             with inspector.stats_lock: inspector.stats["processed"] += 1
-            inspector.log("DONE", ticker, "Sync ok.")
-        except:
+            inspector.log("DONE", ticker, f"Sync ok | Letzter Kurs: {last_price:.2f}")
+
+        except Exception as e:
             with inspector.stats_lock: inspector.stats["errors"] += 1
+            self.update_blacklist(ticker)
 
     def clean_df(self, df):
         if df is None or df.empty: return pd.DataFrame()
@@ -141,9 +160,9 @@ class AureumSentinel:
                 futures = [executor.submit(self.worker_task, a) for a in batch]
                 concurrent.futures.wait(futures)
                 
-                # Periodisches Dashboard-Update im Log
                 elapsed = (time.time() - inspector.stats['start']) / 60
-                inspector.log("STATS", "DASH", f"Proc: {inspector.stats['processed']} | Speed: {inspector.stats['processed']/elapsed:.1f} Ast/Min")
+                speed = inspector.stats['processed']/elapsed
+                inspector.log("STATS", "DASH", f"Proc: {inspector.stats['processed']} | Speed: {speed:.1f} Ast/Min | Errors: {inspector.stats['errors']}")
 
 if __name__ == "__main__":
     AureumSentinel().run()
