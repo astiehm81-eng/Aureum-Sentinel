@@ -15,7 +15,7 @@ HERITAGE_ROOT = "heritage/"
 POOL_FILE = "isin_pool.json"
 AUDIT_FILE = "heritage_audit.txt"
 BLACKLIST_FILE = "blacklist.json"
-MAX_WORKERS = 200
+MAX_WORKERS = 300
 STOOQ_LOCK = threading.Lock()
 FILE_LOCKS = {}
 FILE_LOCKS_LOCK = threading.Lock()
@@ -109,7 +109,7 @@ class AureumSentinel:
         ticker = asset['symbol']
         try:
             with STOOQ_LOCK:
-                time.sleep(random.uniform(0.001, 0.005))
+                time.sleep(random.uniform(0.001, 0.002))
                 r = requests.get(f"https://stooq.com/q/d/l/?s={ticker}&i=d", timeout=7)
                 hist = pd.read_csv(io.StringIO(r.text)) if r.status_code == 200 else pd.DataFrame()
             
