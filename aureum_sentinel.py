@@ -10,7 +10,7 @@ import time
 import random
 from datetime import datetime
 
-# --- KONFIGURATION (GOLDENER STANDARD) ---
+# --- KONFIGURATION (GOLDENER STANDARD V271) ---
 HERITAGE_ROOT = "heritage/"
 POOL_FILE = "isin_pool.json"
 AUDIT_FILE = "heritage_audit.txt"
@@ -21,13 +21,17 @@ FILE_LOCKS = {}
 FILE_LOCKS_LOCK = threading.Lock()
 ANCHOR_THRESHOLD = 0.0005 
 
+# Turbo-Boost: Globale Session für Connection-Reuse
+session = requests.Session()
+session.headers.update({"User-Agent": "Mozilla/5.0"})
+
 class AureumInspector:
     def __init__(self):
         self.stats_lock = threading.Lock()
         self.error_registry = {}
         self.stats = {
             "processed": 0, "errors": 0, "start": time.time(),
-            "found_in_db": 0, "pool_total": 0, "new_isin_found": 0
+            "found_in_db": 0, "pool_total": 0
         }
 
     def log(self, level, ticker, message):
@@ -58,11 +62,12 @@ class AureumSentinel:
 
     def load_json(self, path, type_func):
         if os.path.exists(path):
-            with open(path, "r") as f: return type_func(json.load(f))
+            try:
+                with open(path, "r") as f: return type_func(json.load(f))
+            except: return type_func()
         return type_func()
 
     def load_and_refine_pool(self):
-        """Filtert Dubletten auf Fremd-Marktplätzen und wählt Heimatmarkt"""
         raw_pool = self.load_json(POOL_FILE, list)
         inspector.stats["pool_total"] = len(raw_pool)
         
@@ -72,16 +77,16 @@ class AureumSentinel:
             if ticker in self.blacklist: continue
             
             base = ticker.split('.')[0]
-            # Heimatmarkt-Logik: US (kein Punkt) oder DE (.DE) haben Vorrang
+            # Heimatmarkt-Logik
             if base not in refined:
                 refined[base] = entry
             else:
                 current = refined[base]['symbol']
-                if '.' not in ticker: refined[base] = entry # US gewinnt
-                elif '.DE' in ticker and '.' in current: refined[base] = entry # DE schlägt Rest-EU
+                if '.' not in ticker: refined[base] = entry
+                elif '.DE' in ticker and '.' in current: refined[base] = entry
         
         self.pool = list(refined.values())
-        inspector.log("SYSTEM", "POOL", f"Refined: {len(self.pool)} Primär-Assets (von {inspector.stats['pool_total']})")
+        inspector.log("SYSTEM", "POOL", f"Refined: {len(self.pool)} Primär-Assets")
 
     def perform_pre_flight_inspection(self):
         found = set()
@@ -93,7 +98,7 @@ class AureumSentinel:
                         found.update(df['Ticker'].unique())
                     except: pass
         inspector.stats["found_in_db"] = len(found)
-        inspector.log("STATUS", "GLOBAL", f"Abdeckung: {len(found)} Assets in DB | {len(self.pool)} im Ziel-Pool")
+        inspector.log("STATUS", "GLOBAL", f"Marktabdeckung: {len(found)} Assets in DB")
 
     def update_blacklist(self, ticker):
         with inspector.stats_lock:
@@ -103,18 +108,19 @@ class AureumSentinel:
                 self.blacklist.add(ticker)
                 with open(BLACKLIST_FILE, "w") as f:
                     json.dump(list(self.blacklist), f, indent=4)
-                inspector.log("BLACK", ticker, "Permanent auf Blacklist verschoben.")
+                inspector.log("BLACK", ticker, "Verschoben auf Blacklist.")
 
     def worker_task(self, asset):
         ticker = asset['symbol']
         try:
+            # 1. Stooq mit Session-Reuse
             with STOOQ_LOCK:
                 time.sleep(random.uniform(0.001, 0.002))
-                r = requests.get(f"https://stooq.com/q/d/l/?s={ticker}&i=d", timeout=7)
+                r = session.get(f"https://stooq.com/q/d/l/?s={ticker}&i=d", timeout=5)
                 hist = pd.read_csv(io.StringIO(r.text)) if r.status_code == 200 else pd.DataFrame()
             
-            y_ticker = yf.Ticker(ticker)
-            recent = y_ticker.history(period="7d", interval="5m").reset_index()
+            # 2. Yahoo Schnell-Abfrage
+            recent = yf.download(ticker, period="7d", interval="5m", progress=False, group_by='ticker').reset_index()
             
             df = pd.concat([self.clean_df(hist), self.clean_df(recent)])
             if df.empty: raise ValueError("Empty")
@@ -122,7 +128,7 @@ class AureumSentinel:
             df = df.sort_values('Date').drop_duplicates(subset=['Date'])
             last_price = df.iloc[-1]['Close']
             
-            # Anker-Logik
+            # 3. Anker & Save
             anchors = [df.iloc[0].to_dict()]
             for i in range(1, len(df)):
                 if abs((df.iloc[i]['Close'] / anchors[-1]['Close']) - 1) >= ANCHOR_THRESHOLD:
@@ -139,14 +145,17 @@ class AureumSentinel:
                     pd.concat([db, group], ignore_index=True).to_parquet(path, index=False, compression='snappy')
 
             with inspector.stats_lock: inspector.stats["processed"] += 1
-            inspector.log("DONE", ticker, f"Sync ok | Letzter Kurs: {last_price:.2f}")
+            inspector.log("DONE", ticker, f"Sync ok | Preis: {last_price:.2f}")
 
-        except Exception as e:
+        except:
             with inspector.stats_lock: inspector.stats["errors"] += 1
             self.update_blacklist(ticker)
 
     def clean_df(self, df):
         if df is None or df.empty: return pd.DataFrame()
+        # Yahoo Multi-Index Check
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
         if 'Date' not in df.columns and 'Datetime' in df.columns:
             df = df.rename(columns={'Datetime': 'Date'})
         if 'Date' not in df.columns: return pd.DataFrame()
@@ -162,7 +171,7 @@ class AureumSentinel:
                 
                 elapsed = (time.time() - inspector.stats['start']) / 60
                 speed = inspector.stats['processed']/elapsed
-                inspector.log("STATS", "DASH", f"Proc: {inspector.stats['processed']} | Speed: {speed:.1f} Ast/Min | Errors: {inspector.stats['errors']}")
+                inspector.log("STATS", "DASH", f"Proc: {inspector.stats['processed']} | Speed: {speed:.1f} Ast/Min | Errs: {inspector.stats['errors']}")
 
 if __name__ == "__main__":
     AureumSentinel().run()
