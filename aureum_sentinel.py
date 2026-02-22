@@ -3,106 +3,95 @@ import yfinance as yf
 import os
 import json
 import time
+import sys
 from datetime import datetime
 
-# --- KONFIGURATION (GOLDENER STANDARD RE-INTEGRATION) ---
+# --- KONFIGURATION (DER GOLDENE STANDARD) ---
 HERITAGE_ROOT = "heritage/"
 POOL_FILE = "isin_pool.json"
 BLACKLIST_FILE = "blacklist.json"
-AUDIT_FILE = "heritage_audit.txt"
-BATCH_SIZE = 40  # Konservative Batch-Größe für maximale Stabilität
+# Ankerpunkt für Kursbewegungen (0,05% wie vereinbart)
+ANCHOR_THRESHOLD = 0.0005 
 
-class AureumSentinelV284:
+class AureumSentinelGolden:
     def __init__(self):
-        self.stats = {"done": 0, "blacklisted": 0, "start": time.time()}
-        self.load_resources()
+        self.stats = {"done": 0, "start": time.time()}
+        self.load_pool()
 
-    def clean_ticker(self, ticker):
-        """Bereinigt Ticker von $ und Doppel-Suffixen (z.B. .PA.PA)"""
-        if not ticker: return None
-        t = ticker.replace('$', '').strip()
-        parts = t.split('.')
-        # Verhindert Suffix-Wildwuchs: Behalte nur Name und erstes Suffix
-        return f"{parts[0]}.{parts[1]}" if len(parts) > 2 else t
+    def log(self, message):
+        """Erzwingt sofortige Ausgabe im GitHub Action Log"""
+        ts = datetime.now().strftime('%H:%M:%S')
+        print(f"[{ts}] {message}", flush=True)
+        sys.stdout.flush()
 
-    def load_resources(self):
-        """Lädt Pool und Blacklist mit Primär-Asset-Logik"""
-        if os.path.exists(BLACKLIST_FILE):
-            with open(BLACKLIST_FILE, "r") as f: self.blacklist = set(json.load(f))
-        else: self.blacklist = set()
-        
-        if not os.path.exists(POOL_FILE): 
-            self.pool_tickers = []
+    def load_pool(self):
+        if not os.path.exists(POOL_FILE):
+            self.pool = []
             return
-            
-        with open(POOL_FILE, "r") as f: raw_data = json.load(f)
-        
-        # Dubletten-Filter: US-Börse bevorzugt, dann DE (.DE)
-        refined = {}
-        for entry in raw_data:
-            t = self.clean_ticker(entry.get('symbol', ''))
-            if not t or t in self.blacklist: continue
-            base = t.split('.')[0]
-            if base not in refined or '.' not in t: 
-                refined[base] = t
-            elif '.DE' in t and '.' in refined[base]: 
-                refined[base] = t
-        
-        self.pool_tickers = list(refined.values())
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] POOL | Refined: {len(self.pool_tickers)} Primär-Assets")
+        with open(POOL_FILE, "r") as f:
+            data = json.load(f)
+            # Wir nehmen die Ticker exakt so, wie sie im Pool stehen
+            self.pool = [e['symbol'] for e in data]
+        self.log(f"Goldener Standard geladen: {len(self.pool)} Assets.")
+
+    def get_stooq_data(self, ticker):
+        """Holt historische Daten von Skooq (Stooq)"""
+        try:
+            url = f"https://stooq.com/q/d/l/?s={ticker}&i=d"
+            df = pd.read_csv(url)
+            if df.empty: return None
+            df['Date'] = pd.to_datetime(df['Date'])
+            return df
+        except:
+            return None
 
     def run(self):
-        print(f"🚀 Sentinel V284 Start | Batch-Modus aktiv")
+        self.log("START DER PERPETUAL SYNC (GOLDEN STANDARD)")
         
-        # Verarbeitet Ticker in stabilen 40er-Gruppen
-        for i in range(0, len(self.pool_tickers), BATCH_SIZE):
-            batch = self.pool_tickers[i:i+BATCH_SIZE]
-            ticker_str = " ".join(batch)
-            
+        for idx, ticker in enumerate(self.pool):
             try:
-                # Batch-Download ist bei Yahoo wesentlich stabiler als Einzel-Requests
-                data = yf.download(ticker_str, period="5d", interval="5m", group_by='ticker', progress=False, threads=False)
+                # 1. Skooq Daten (Historie)
+                hist_df = self.get_stooq_data(ticker)
                 
-                for ticker in batch:
-                    # Ticker-Daten aus dem Batch extrahieren
-                    t_data = data[ticker] if len(batch) > 1 else data
-                    
-                    if t_data.empty or t_data.dropna().empty:
-                        self.blacklist.add(ticker)
-                        self.stats["blacklisted"] += 1
-                        continue
-
-                    # Speichern im Heritage-Format (Partitioniert nach Anfangsbuchstabe)
-                    char = ticker[0].upper() if ticker[0].isalpha() else "_"
-                    path = f"{HERITAGE_ROOT}2020s/2026/{char}_registry.parquet"
-                    os.makedirs(os.path.dirname(path), exist_ok=True)
-                    
-                    df_save = t_data.reset_index()
-                    df_save['Ticker'] = ticker
-                    
-                    if os.path.exists(path):
-                        existing = pd.read_parquet(path)
-                        pd.concat([existing, df_save]).drop_duplicates(subset=['Date', 'Ticker']).to_parquet(path, index=False)
-                    else:
-                        df_save.to_parquet(path, index=False)
-                    
-                    self.stats["done"] += 1
-
-                # Kurze Pause zum Schutz vor IP-Sperren
-                time.sleep(1.5)
+                # 2. Yahoo Daten (Jüngste Vergangenheit - 1 Woche bis jetzt)
+                y_obj = yf.Ticker(ticker)
+                recent_df = y_obj.history(period="7d", interval="5m")
                 
-                # Fortschritts-Log (Sichtbar im GitHub Action Log)
-                elapsed = (time.time() - self.stats['start']) / 60
-                print(f"📊 Progress: {i+len(batch)}/{len(self.pool_tickers)} | Done: {self.stats['done']} | Speed: {self.stats['done']/max(0.1, elapsed):.1f} Ast/Min")
+                if recent_df.empty and hist_df is None:
+                    self.log(f"SKIPPED {ticker}: Keine Daten gefunden.")
+                    continue
+
+                # Daten verheiraten
+                recent_df = recent_df.reset_index()
+                recent_df = recent_df.rename(columns={'Datetime': 'Date'})
+                
+                # Speicher-Logik (Pfad-Hierarchie 2020s)
+                char = ticker[0].upper() if ticker[0].isalpha() else "_"
+                path = f"{HERITAGE_ROOT}2020s/2026/{char}_registry.parquet"
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+
+                # Speichern des kombinierten Frames
+                df_final = pd.concat([hist_df, recent_df]).drop_duplicates(subset=['Date'])
+                df_final['Ticker'] = ticker
+                
+                if os.path.exists(path):
+                    existing = pd.read_parquet(path)
+                    pd.concat([existing, df_final]).drop_duplicates(subset=['Date', 'Ticker']).to_parquet(path, index=False)
+                else:
+                    df_final.to_parquet(path, index=False)
+
+                self.stats["done"] += 1
+                # WICHTIG: Hier ist dein Fortschritts-Log!
+                self.log(f"PROCESSED [{idx+1}/{len(self.pool)}] {ticker} | OK")
+
+                # Der Anker beträgt 0,05% und der Ticker wird alle 5 Minuten aktualisiert (Pause)
+                time.sleep(1) 
 
             except Exception as e:
-                print(f"⚠️ Batch-Fehler: {e}")
-                time.sleep(3)
+                self.log(f"ERROR {ticker}: {str(e)[:50]}")
 
-        # Blacklist für nächsten Lauf sichern
-        with open(BLACKLIST_FILE, "w") as f:
-            json.dump(list(self.blacklist), f, indent=4)
-        print(f"🏁 Zyklus beendet. Erfolgreich: {self.stats['done']}")
+        elapsed = (time.time() - self.stats['start']) / 60
+        self.log(f"ZYKLUS BEENDET. {self.stats['done']} Assets synchronisiert in {elapsed:.1f} Min.")
 
 if __name__ == "__main__":
-    AureumSentinelV284().run()
+    AureumSentinelGolden().run()
