@@ -1,83 +1,73 @@
 import pandas as pd
 import yfinance as yf
-import requests
-import io
 import os
 import json
 import concurrent.futures
 import threading
 import time
 from datetime import datetime
-from requests.adapters import HTTPAdapter
 
-# --- CONFIG V277 OVERDRIVE ---
-MAX_WORKERS = 300
+# --- CONFIG V278 ---
+MAX_WORKERS = 100 # Reduziert von 300 auf 100, um Insta-Bans zu vermeiden
 HERITAGE_ROOT = "heritage/"
-# Partitionierung aktivieren: Dateien werden nach Ticker-Anfangsbuchstaben getrennt
-# Dies reduziert File-Lock-Konflikte um den Faktor 26!
-PARTITION_MODE = True 
+POOL_FILE = "isin_pool.json"
+BLACKLIST_FILE = "blacklist.json"
+AUDIT_FILE = "heritage_audit.txt"
 
-adapter = HTTPAdapter(
-    pool_connections=MAX_WORKERS, 
-    pool_maxsize=MAX_WORKERS, 
-    pool_block=False # Verhindert Blockaden im Connection-Pool
-)
-session = requests.Session()
-session.mount("https://", adapter)
-
-class OverdriveInspector:
+class AureumSentinelV278:
     def __init__(self):
-        self.lock = threading.Lock()
-        self.stats = {"done": 0, "start": time.time(), "new": 0}
+        self.stats_lock = threading.Lock()
+        self.stats = {"done": 0, "err": 0, "start": time.time()}
+        self.init_files()
 
-    def report(self, total):
-        with self.lock:
-            self.stats["done"] += 1
-            if self.stats["done"] % 50 == 0:
-                elapsed = (time.time() - self.stats['start']) / 60
-                speed = self.stats['done'] / elapsed
-                eta = (total - self.stats['done']) / speed if speed > 0 else 0
-                print(f"🚀 Status: {self.stats['done']}/{total} | Speed: {speed:.1f} a/m | ETA: {eta:.1f}m")
-
-inspector = OverdriveInspector()
-
-class AureumSentinelV277:
-    def worker_task(self, asset, total_count):
+    def init_files(self):
+        # WICHTIG: Blacklist leeren für den Neustart
+        if os.path.exists(BLACKLIST_FILE):
+            with open(BLACKLIST_FILE, "w") as f:
+                json.dump([], f)
+        
+    def worker_task(self, asset, total):
         ticker = asset['symbol']
         try:
-            # 1. Delta-Check: Wann war das letzte Update?
-            # (Hier verkürzt: Wir holen nur die letzten 2 Tage statt 7, wenn möglich)
+            # Jitter: Verhindert, dass 100 Anfragen exakt gleichzeitig einschlagen
+            time.sleep(os.getpid() % 10 * 0.1) 
+            
             y_obj = yf.Ticker(ticker)
-            df = y_obj.history(period="2d", interval="5m")
+            df = y_obj.history(period="5d", interval="5m")
             
             if df.empty:
-                # Blacklist Logic...
-                return
+                raise ValueError("No Data")
 
-            # 2. Partitioned Storage (Vermeidet Stau)
-            first_char = ticker[0].upper() if ticker[0].isalpha() else "_"
-            decade = f"{(datetime.now().year//10)*10}s"
-            # Dateipfad: heritage/2020s/2024/A_assets.parquet
-            folder = os.path.join(HERITAGE_ROOT, decade, str(datetime.now().year))
-            os.makedirs(folder, exist_ok=True)
-            path = os.path.join(folder, f"{first_char}_registry.parquet")
-
-            with inspector.lock: # Nur noch kurzes Locking pro Buchstabe
-                # Schnelles Append-Verfahren
+            # Partitioniertes Speichern (V277 Standard)
+            char = ticker[0].upper() if ticker[0].isalpha() else "_"
+            path = f"{HERITAGE_ROOT}2020s/2026/{char}_registry.parquet"
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            
+            with self.stats_lock:
                 df['Ticker'] = ticker
                 df.to_parquet(path, engine='pyarrow', append=os.path.exists(path))
-
-            inspector.report(total_count)
+                self.stats["done"] += 1
+                
+            if self.stats["done"] % 20 == 0:
+                self.log_status(total)
         except:
-            pass
+            with self.stats_lock: self.stats["err"] += 1
+
+    def log_status(self, total):
+        elapsed = (time.time() - self.stats['start']) / 60
+        speed = self.stats['done'] / elapsed if elapsed > 0 else 0
+        coverage = (self.stats['done'] / total) * 100
+        print(f"📊 Progress: {self.stats['done']}/{total} ({coverage:.1f}%) | Speed: {speed:.1f} a/m | Errs: {self.stats['err']}")
 
     def run(self):
-        # Pool laden...
-        pool = [{"symbol": "AAPL"}, {"symbol": "SAP.DE"}] # Beispiel
+        with open(POOL_FILE, "r") as f:
+            pool = json.load(f)
+        
         total = len(pool)
+        print(f"🚀 Sentinel V278 Start | Pool: {total} | Workers: {MAX_WORKERS}")
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             executor.map(lambda a: self.worker_task(a, total), pool)
 
-# Startbefehl
-# AureumSentinelV277().run()
+if __name__ == "__main__":
+    AureumSentinelV278().run()
