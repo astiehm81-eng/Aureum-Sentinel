@@ -2,33 +2,24 @@ import pandas as pd
 import yfinance as yf
 import os
 import json
-import concurrent.futures
-import threading
 import time
-import logging
 from datetime import datetime
 
-# Yahoo Finance Logger auf "Nur Kritisch" setzen, um das Log sauber zu halten
-logging.getLogger('yfinance').setLevel(logging.CRITICAL)
-
-# --- CONFIG V282 ---
-MAX_WORKERS = 100 
+# --- KONFIGURATION (ZURÜCK ZUM STABILEN KERN) ---
 HERITAGE_ROOT = "heritage/"
 POOL_FILE = "isin_pool.json"
 BLACKLIST_FILE = "blacklist.json"
+BATCH_SIZE = 50  # Yahoo mag Gruppen von 50 Tickern gleichzeitig sehr gern
 
-class AureumSentinelV282:
+class AureumSentinelV283:
     def __init__(self):
-        self.stats_lock = threading.Lock()
-        self.stats = {
-            "done": 0, "err": 0, "start": time.time(), 
-            "total_pool": 0, "blacklisted_now": 0
-        }
+        self.stats = {"done": 0, "blacklisted": 0, "start": time.time()}
         self.load_resources()
 
     def clean_ticker(self, ticker):
         if not ticker: return None
         t = ticker.replace('$', '').strip()
+        # Entferne Duplikate in der Endung (Fix für .PA.PA)
         parts = t.split('.')
         return f"{parts[0]}.{parts[1]}" if len(parts) > 2 else t
 
@@ -37,9 +28,13 @@ class AureumSentinelV282:
             with open(BLACKLIST_FILE, "r") as f: self.blacklist = set(json.load(f))
         else: self.blacklist = set()
         
-        if not os.path.exists(POOL_FILE): self.pool = []; return
+        if not os.path.exists(POOL_FILE): 
+            self.pool_tickers = []
+            return
+            
         with open(POOL_FILE, "r") as f: raw_data = json.load(f)
         
+        # Validierung und Priorisierung (US > DE > Rest)
         refined = {}
         for entry in raw_data:
             t = self.clean_ticker(entry.get('symbol', ''))
@@ -48,68 +43,67 @@ class AureumSentinelV282:
             if base not in refined or '.' not in t: refined[base] = t
             elif '.DE' in t and '.' in refined[base]: refined[base] = t
         
-        self.pool = [{"symbol": s} for s in refined.values()]
-        self.stats["total_pool"] = len(self.pool)
+        self.pool_tickers = list(refined.values())
+        print(f"✅ Pool bereit: {len(self.pool_tickers)} Assets (Säuberung aktiv)")
 
-    def print_dashboard(self):
-        elapsed = (time.time() - self.stats['start']) / 60
-        done = self.stats['done']
-        total = self.stats['total_pool']
-        speed = done / elapsed if elapsed > 0 else 0
-        coverage = (done / total * 100) if total > 0 else 0
-        
-        print(f"\n" + "="*50)
-        print(f"📊 AUREUM PROGRESS: [{done}/{total}] ({coverage:.1f}%)")
-        print(f"🚀 SPEED: {speed:.1f} assets/min | ERRORS: {self.stats['err']}")
-        print(f"🚫 BLACKLISTED THIS RUN: {self.stats['blacklisted_now']}")
-        print("="*50 + "\n", flush=True)
-
-    def worker_task(self, asset):
-        ticker = asset['symbol']
+    def save_data(self, ticker, data):
+        """Speichert die Daten im Heritage-Format"""
+        if data.empty: return False
         try:
-            # yfinance download mit absoluter Stille
-            df = yf.download(ticker, period="5d", interval="5m", progress=False, group_by='ticker', threads=False)
-            
-            if df is None or df.empty:
-                with self.stats_lock:
-                    self.blacklist.add(ticker)
-                    self.stats["blacklisted_now"] += 1
-                return
-
             char = ticker[0].upper() if ticker[0].isalpha() else "_"
             path = f"{HERITAGE_ROOT}2020s/2026/{char}_registry.parquet"
             os.makedirs(os.path.dirname(path), exist_ok=True)
             
-            df_save = df.reset_index()
+            df_save = data.reset_index()
             df_save['Ticker'] = ticker
             
-            with self.stats_lock:
-                if os.path.exists(path):
-                    existing = pd.read_parquet(path)
-                    pd.concat([existing, df_save]).drop_duplicates(subset=['Date', 'Ticker']).to_parquet(path, index=False)
-                else:
-                    df_save.to_parquet(path, index=False)
-                self.stats["done"] += 1
-        except Exception:
-            with self.stats_lock: self.stats["err"] += 1
+            if os.path.exists(path):
+                existing = pd.read_parquet(path)
+                pd.concat([existing, df_save]).drop_duplicates(subset=['Date', 'Ticker']).to_parquet(path, index=False)
+            else:
+                df_save.to_parquet(path, index=False)
+            return True
+        except:
+            return False
 
     def run(self):
-        print(f"Starting V282 | Pool: {self.stats['total_pool']} | Workers: {MAX_WORKERS}")
+        print(f"🚀 Aureum Sentinel V283 startet Batch-Processing...")
         
-        # Nutzen von as_completed für ein echtes Live-Dashboard
-        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            future_to_ticker = {executor.submit(self.worker_task, a): a for a in self.pool}
+        # Wir gehen in 50er Schritten vor, um Yahoo nicht zu reizen
+        for i in range(0, len(self.pool_tickers), BATCH_SIZE):
+            batch = self.pool_tickers[i:i+BATCH_SIZE]
+            ticker_string = " ".join(batch)
             
-            counter = 0
-            for future in concurrent.futures.as_completed(future_to_ticker):
-                counter += 1
-                # Alle 25 Assets das Dashboard aktualisieren
-                if counter % 25 == 0 or counter == self.stats['total_pool']:
-                    self.print_dashboard()
+            try:
+                # Der goldene Weg: Ein einziger Call für 50 Ticker
+                data = yf.download(ticker_string, period="5d", interval="5m", group_by='ticker', progress=False, threads=False)
                 
-        # Blacklist final speichern
+                for ticker in batch:
+                    # Extrahiere Ticker-Daten aus dem Batch-Frame
+                    ticker_data = data[ticker] if len(batch) > 1 else data
+                    
+                    if ticker_data.empty or ticker_data.dropna().empty:
+                        self.blacklist.add(ticker)
+                        self.stats["blacklisted"] += 1
+                    else:
+                        if self.save_data(ticker, ticker_data):
+                            self.stats["done"] += 1
+                            
+                # Kleiner Cool-down zwischen den Batches
+                time.sleep(2)
+                
+                # Fortschritt loggen
+                elapsed = (time.time() - self.stats['start']) / 60
+                print(f"📊 [{i+len(batch)}/{len(self.pool_tickers)}] | Erfolgreich: {self.stats['done']} | Blacklisted: {self.stats['blacklisted']} | {elapsed:.1f}m")
+                
+            except Exception as e:
+                print(f"⚠️ Batch-Fehler bei {batch[0]}...: {e}")
+                time.sleep(5)
+
+        # Blacklist finalisieren
         with open(BLACKLIST_FILE, "w") as f:
             json.dump(list(self.blacklist), f, indent=4)
+        print("🏁 Zyklus beendet.")
 
 if __name__ == "__main__":
-    AureumSentinelV282().run()
+    AureumSentinelV283().run()
