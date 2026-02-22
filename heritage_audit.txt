@@ -1689,3 +1689,12 @@ SAN.MC: 10.756 EUR | Vola: 0.3479 | Stooq: ✅
 [2026-02-21 23:43:08] [STATS  ] DASH       | Proc: 14 | Speed: 31.3 Ast/Min
 [2026-02-21 23:43:18] [STATS  ] DASH       | Proc: 14 | Speed: 22.6 Ast/Min
 [2026-02-21 23:43:28] [STATS  ] DASH       | Proc: 14 | Speed: 17.7 Ast/Min
+[2026-02-22 00:17:03] [SYSTEM ] POOL       | Refined: 1169 Primär-Assets
+[2026-02-22 00:17:04] [STATUS ] GLOBAL     | Marktabdeckung: 1225 Assets in DB
+[2026-02-22 00:17:31] [STATS  ] DASH       | Proc: 0 | Speed: 0.0 Ast/Min | Errs: 200
+[2026-02-22 00:17:59] [STATS  ] DASH       | Proc: 0 | Speed: 0.0 Ast/Min | Errs: 400
+[2026-02-22 00:18:01] [DONE   ] ENI        | Sync ok | Preis: 2.49
+[2026-02-22 00:18:27] [STATS  ] DASH       | Proc: 1 | Speed: 0.7 Ast/Min | Errs: 599
+[2026-02-22 00:18:52] [STATS  ] DASH       | Proc: 1 | Speed: 0.6 Ast/Min | Errs: 799
+[2026-02-22 00:19:17] [STATS  ] DASH       | Proc: 1 | Speed: 0.4 Ast/Min | Errs: 999
+[2026-02-22 00:19:38] [STATS  ] DASH       | Proc: 1 | Speed: 0.4 Ast/Min | Errs: 1168
