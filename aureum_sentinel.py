@@ -9,17 +9,25 @@ import threading
 import time
 import random
 from datetime import datetime
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
-# --- KONFIGURATION (GOLDENER STANDARD V272) ---
+# --- KONFIGURATION (V273 TURBO-STANDARD) ---
 HERITAGE_ROOT = "heritage/"
 POOL_FILE = "isin_pool.json"
 AUDIT_FILE = "heritage_audit.txt"
 BLACKLIST_FILE = "blacklist.json"
-MAX_WORKERS = 200
+MAX_WORKERS = 300  # Aggressive Skalierung
 STOOQ_LOCK = threading.Lock()
 FILE_LOCKS = {}
 FILE_LOCKS_LOCK = threading.Lock()
 ANCHOR_THRESHOLD = 0.0005 
+
+# Connection Pooling für 300+ Worker vorbereiten
+adapter = HTTPAdapter(pool_connections=MAX_WORKERS, pool_maxsize=MAX_WORKERS, max_retries=Retry(total=2, backoff_factor=0.1))
+session = requests.Session()
+session.mount("https://", adapter)
+session.headers.update({"User-Agent": "Mozilla/5.0"})
 
 class AureumInspector:
     def __init__(self):
@@ -27,7 +35,7 @@ class AureumInspector:
         self.error_registry = {}
         self.stats = {
             "processed": 0, "errors": 0, "start": time.time(),
-            "found_in_db": 0, "pool_total": 0
+            "found_in_db": 0, "pool_total": 0, "blacklisted_now": 0
         }
 
     def log(self, level, ticker, message):
@@ -48,7 +56,7 @@ inspector = AureumInspector()
 class AureumSentinel:
     def __init__(self):
         self.init_structure()
-        self.blacklist = self.load_json(BLACKLIST_FILE, set)
+        self.load_blacklist()
         self.load_and_refine_pool()
         self.perform_pre_flight_inspection()
 
@@ -56,76 +64,88 @@ class AureumSentinel:
         for d in ["1960s","1970s","1980s","1990s", "2000s", "2010s", "2020s"]:
             os.makedirs(os.path.join(HERITAGE_ROOT, d), exist_ok=True)
 
-    def load_json(self, path, type_func):
-        if os.path.exists(path):
-            try:
-                with open(path, "r") as f: return type_func(json.load(f))
-            except: return type_func()
-        return type_func()
+    def load_blacklist(self):
+        if os.path.exists(BLACKLIST_FILE):
+            with open(BLACKLIST_FILE, "r") as f: self.blacklist = set(json.load(f))
+        else: self.blacklist = set()
 
     def load_and_refine_pool(self):
-        """Filtert Dubletten und loggt den Prozess"""
-        raw_pool = self.load_json(POOL_FILE, list)
+        if not os.path.exists(POOL_FILE): return
+        with open(POOL_FILE, "r") as f: raw_pool = json.load(f)
         inspector.stats["pool_total"] = len(raw_pool)
         
         refined = {}
         for entry in raw_pool:
             ticker = entry['symbol']
             if ticker in self.blacklist: continue
-            
             base = ticker.split('.')[0]
-            if base not in refined:
-                refined[base] = entry
+            if base not in refined: refined[base] = entry
             else:
                 current = refined[base]['symbol']
                 if '.' not in ticker: refined[base] = entry
                 elif '.DE' in ticker and '.' in current: refined[base] = entry
         
         self.pool = list(refined.values())
-        inspector.log("SYSTEM", "POOL", f"Refined: {len(self.pool)} Primär-Assets geladen.")
+        inspector.log("SYSTEM", "POOL", f"Bereinigt: {len(self.pool)} Primär-Assets.")
 
     def perform_pre_flight_inspection(self):
-        found_tickers = set()
+        found = set()
         for root, _, files in os.walk(HERITAGE_ROOT):
             for f in files:
                 if f.endswith(".parquet"):
                     try:
                         df = pd.read_parquet(os.path.join(root, f), columns=['Ticker'])
-                        found_tickers.update(df['Ticker'].unique())
+                        found.update(df['Ticker'].unique())
                     except: pass
-        inspector.stats["found_in_db"] = len(found_tickers)
-        inspector.log("STATUS", "GLOBAL", f"Marktabdeckung: {len(found_tickers)} Assets in DB | Pool-Abgleich gestartet.")
+        inspector.stats["found_in_db"] = len(found)
+        inspector.log("STATUS", "GLOBAL", f"DB-Bestand: {len(found)} Assets.")
+
+    def update_blacklist(self, ticker, immediate=False):
+        with inspector.stats_lock:
+            count = inspector.error_registry.get(ticker, 0) + 1
+            inspector.error_registry[ticker] = count
+            if immediate or count >= 3:
+                if ticker not in self.blacklist:
+                    self.blacklist.add(ticker)
+                    inspector.stats["blacklisted_now"] += 1
+                    with open(BLACKLIST_FILE, "w") as f:
+                        json.dump(list(self.blacklist), f, indent=4)
+                    reason = "Sofort-Ban (404/Delisted)" if immediate else "3 Fehlversuche"
+                    inspector.log("BLACK", ticker, f"Blacklist: {reason}")
 
     def worker_task(self, asset):
         ticker = asset['symbol']
         try:
-            # Phase 1: Stooq
-            inspector.log("FETCH", ticker, "Anfrage bei Stooq gestartet...")
+            # 1. Stooq mit Session-Reuse
             with STOOQ_LOCK:
-                time.sleep(random.uniform(0.001, 0.005))
-                r = requests.get(f"https://stooq.com/q/d/l/?s={ticker}&i=d", timeout=10)
+                time.sleep(random.uniform(0.001, 0.002))
+                r = session.get(f"https://stooq.com/q/d/l/?s={ticker}&i=d", timeout=8)
+                if r.status_code == 404:
+                    self.update_blacklist(ticker, immediate=True)
+                    return
                 hist = pd.read_csv(io.StringIO(r.text)) if r.status_code == 200 else pd.DataFrame()
             
-            # Phase 2: Yahoo (Zurück zum stabilen Modus)
-            inspector.log("FETCH", ticker, "Anfrage bei Yahoo (7d/5m) gestartet...")
+            # 2. Yahoo
             y_obj = yf.Ticker(ticker)
-            recent = y_obj.history(period="7d", interval="5m").reset_index()
+            recent = y_obj.history(period="7d", interval="5m")
+            if recent.empty:
+                # Prüfen ob Ticker bei Yahoo existiert
+                if y_obj.info.get('regularMarketPrice') is None:
+                    self.update_blacklist(ticker, immediate=True)
+                    return
+            recent = recent.reset_index()
             
-            # Phase 3: Daten-Merge
+            # 3. Merge & Anker (0.05%)
             df = pd.concat([self.clean_df(hist), self.clean_df(recent)])
-            if df.empty: 
-                inspector.log("WARN", ticker, "Keine Daten gefunden.")
-                raise ValueError("Empty")
-
+            if df.empty: raise ValueError("Keine Daten")
             df = df.sort_values('Date').drop_duplicates(subset=['Date'])
-            last_price = df.iloc[-1]['Close']
             
-            # Phase 4: Anker-Berechnung & Speicherung
             anchors = [df.iloc[0].to_dict()]
             for i in range(1, len(df)):
                 if abs((df.iloc[i]['Close'] / anchors[-1]['Close']) - 1) >= ANCHOR_THRESHOLD:
                     anchors.append(df.iloc[i].to_dict())
             
+            # 4. Atomic Storage
             final_df = pd.DataFrame(anchors)
             for year, group in final_df.groupby(final_df['Date'].dt.year):
                 decade = f"{(int(year)//10)*10}s"
@@ -137,12 +157,12 @@ class AureumSentinel:
                     pd.concat([db, group], ignore_index=True).to_parquet(path, index=False, compression='snappy')
 
             with inspector.stats_lock: inspector.stats["processed"] += 1
-            inspector.log("DONE", ticker, f"Erfolgreich synchronisiert | Letzter Kurs: {last_price:.2f}")
+            inspector.log("DONE", ticker, f"Sync OK | Kurs: {df.iloc[-1]['Close']:.2f}")
 
         except Exception as e:
-            inspector.log("ERROR", ticker, f"Fehlgeschlagen: {str(e)}")
+            inspector.log("ERROR", ticker, f"Fehler: {str(e)}")
             with inspector.stats_lock: inspector.stats["errors"] += 1
-            # Blacklist Logik (optional hier einbauen)
+            self.update_blacklist(ticker)
 
     def clean_df(self, df):
         if df is None or df.empty: return pd.DataFrame()
@@ -153,16 +173,16 @@ class AureumSentinel:
         return df
 
     def run(self):
-        inspector.log("SYSTEM", "START", f"V272 gestartet mit {MAX_WORKERS} Workern.")
+        inspector.log("START", "TURBO", f"V273 initiiert mit {MAX_WORKERS} Workern.")
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            for i in range(0, len(self.pool), 200):
-                batch = self.pool[i:i+200]
+            for i in range(0, len(self.pool), MAX_WORKERS):
+                batch = self.pool[i:i+MAX_WORKERS]
                 futures = [executor.submit(self.worker_task, a) for a in batch]
                 concurrent.futures.wait(futures)
                 
                 elapsed = (time.time() - inspector.stats['start']) / 60
                 speed = inspector.stats['processed']/elapsed
-                inspector.log("STATS", "DASH", f"Batch beendet | Speed: {speed:.1f} Ast/Min | Errors: {inspector.stats['errors']}")
+                inspector.log("STATS", "DASH", f"Proc: {inspector.stats['processed']} | Speed: {speed:.1f} Ast/Min | Neu Blacklist: {inspector.stats['blacklisted_now']}")
 
 if __name__ == "__main__":
     AureumSentinel().run()
